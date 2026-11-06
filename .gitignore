@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+release-build/
+*.log
+
+# 调研语料（ImageGlass 源码 dump 等，只读本地），保留调研报告正文
+_research/*
+!_research/*.md
+
+# 本地 E2E 夹具、profile 与截图，只保留探针脚本
+.acr/*
+!.acr/probe/
+.acr/probe/*
+!.acr/probe/*.mjs
+!.acr/probe/*.ps1

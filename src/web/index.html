@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'"
+    />
+    <title>FastViewer</title>
+    <link rel="stylesheet" href="assets/tokens.css" />
+    <link rel="stylesheet" href="assets/app.css" />
+  </head>
+  <body>
+    <div class="fv-app">
+      <div id="content" class="fv-content">
+        <div id="browser" class="fv-browser">
+          <header id="crumbs" class="fv-crumbs" hidden>
+            <nav id="crumb-list" class="fv-crumb-list" aria-label="路径"></nav>
+          </header>
+          <div id="toolbar" class="fv-toolbar" hidden>
+            <div class="fv-toolbar-group" role="group" aria-label="排序">
+              <button id="sort-name" class="fv-toolbar-button fv-sort-button" type="button" title="按名称排序">名称</button>
+              <button id="sort-mtime" class="fv-toolbar-button fv-sort-button" type="button" title="按修改时间排序">时间</button>
+              <button id="sort-size" class="fv-toolbar-button fv-sort-button" type="button" title="按文件大小排序">大小</button>
+              <button id="sort-order" class="fv-toolbar-button" type="button" title="切换正序 / 倒序">↑</button>
+            </div>
+            <div class="fv-toolbar-group" role="group" aria-label="图块大小">
+              <button id="tile-smaller" class="fv-toolbar-button" type="button" title="缩小图块" aria-label="缩小图块">−</button>
+              <input id="tile-size" class="fv-tile-range" type="range" min="96" max="320" step="4" aria-label="图块大小" />
+              <button id="tile-larger" class="fv-toolbar-button" type="button" title="放大图块" aria-label="放大图块">+</button>
+              <span id="tile-size-value" class="fv-tile-value" title="当前图块尺寸">180</span>
+            </div>
+          </div>
+          <div id="wall" class="fv-wall"></div>
+        </div>
+        <div
+          id="split"
+          class="fv-split"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整图墙与查看器宽度"
+          title="拖动调整宽度，双击恢复默认"
+        ></div>
+        <section id="viewer" class="fv-viewer">
+          <div id="viewer-empty" class="fv-viewer-empty" hidden>
+            <span>没有可查看的图片或视频</span>
+          </div>
+          <div id="viewer-stage" class="fv-viewer-stage">
+            <img id="viewer-image" class="fv-viewer-media" alt="" hidden />
+            <video id="viewer-video" class="fv-viewer-media" hidden></video>
+            <div id="viewer-loading" class="fv-viewer-loading" hidden>
+              <span class="fv-spinner" aria-hidden="true"></span>
+              <span>加载中…</span>
+            </div>
+            <div id="viewer-error" class="fv-viewer-error" hidden>
+              <p id="viewer-error-name" class="fv-viewer-error-name"></p>
+              <p id="viewer-error-text" class="fv-viewer-error-text">无法显示该文件</p>
+              <div class="fv-viewer-error-actions">
+                <button id="viewer-retry" type="button">重试</button>
+                <button id="viewer-next-error" type="button">下一项</button>
+              </div>
+            </div>
+            <div id="video-controls" class="fv-video-controls" hidden>
+              <button
+                id="video-play"
+                class="fv-video-button"
+                type="button"
+                title="播放 / 暂停（Space）"
+                aria-label="播放或暂停"
+              >
+                播放
+              </button>
+              <span id="video-time" class="fv-video-time">0:00 / 0:00</span>
+              <div
+                id="video-track"
+                class="fv-video-track"
+                role="slider"
+                aria-label="播放进度"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              >
+                <div id="video-buffered" class="fv-video-buffered"></div>
+                <div id="video-played" class="fv-video-played"></div>
+                <div id="video-thumb" class="fv-video-thumb"></div>
+              </div>
+              <button
+                id="video-mute"
+                class="fv-video-button"
+                type="button"
+                title="静音（M）"
+                aria-label="静音"
+              >
+                静音
+              </button>
+              <input
+                id="video-volume"
+                class="fv-video-volume"
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value="100"
+                aria-label="音量"
+              />
+            </div>
+            <div id="video-replay" class="fv-video-replay" hidden>
+              <button id="video-replay-button" class="fv-video-replay-button" type="button">重播</button>
+            </div>
+          </div>
+          <aside id="viewer-detail" class="fv-viewer-detail" hidden>
+            <header class="fv-detail-head">
+              <span>详细信息</span>
+              <button
+                id="detail-close"
+                class="fv-viewer-button"
+                type="button"
+                title="隐藏详情（I）"
+                aria-label="隐藏详情"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
+            </header>
+            <dl class="fv-detail-list">
+              <div><dt>文件名</dt><dd id="detail-name"></dd></div>
+              <div><dt>尺寸</dt><dd id="detail-dim"></dd></div>
+              <div><dt>大小</dt><dd id="detail-size"></dd></div>
+              <div><dt>修改时间</dt><dd id="detail-time"></dd></div>
+            </dl>
+          </aside>
+          <button
+            id="viewer-info"
+            class="fv-viewer-info"
+            type="button"
+            title="显示详细信息（I）"
+            aria-label="显示详细信息"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+          </button>
+          <span id="viewer-counter" class="fv-viewer-counter"></span>
+          <div id="viewer-zoom" class="fv-viewer-zoom" hidden>
+            <button id="zoom-actual" class="fv-viewer-zoom-button" type="button" title="实际大小 1:1">1:1</button>
+            <button id="zoom-fit" class="fv-viewer-zoom-button" type="button" title="适应窗口">适应窗口</button>
+          </div>
+        </section>
+        <div id="fs-modal" class="fv-fs-modal" hidden>
+          <div id="fs-stage" class="fv-fs-stage">
+            <img id="fs-image" class="fv-fs-image" alt="" draggable="false" hidden />
+          </div>
+          <button id="fs-close" class="fv-fs-close" type="button" title="关闭（Esc）" aria-label="关闭全屏">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12" /></svg>
+          </button>
+          <span id="fs-counter" class="fv-fs-counter"></span>
+          <button id="fs-prev" class="fv-fs-hot fv-fs-hot--prev" type="button" title="上一张（←）" aria-label="上一张">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+          </button>
+          <button id="fs-next" class="fv-fs-hot fv-fs-hot--next" type="button" title="下一张（→）" aria-label="下一张">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+          </button>
+          <div id="fs-zoom" class="fv-viewer-zoom">
+            <button id="fs-zoom-actual" class="fv-viewer-zoom-button" type="button" title="实际大小 1:1">1:1</button>
+            <button id="fs-zoom-fit" class="fv-viewer-zoom-button" type="button" title="适应窗口">适应窗口</button>
+          </div>
+          <aside id="fs-detail" class="fv-fs-detail" hidden>
+            <header class="fv-fs-detail-head">
+              <span>详细信息</span>
+              <button
+                id="fs-detail-close"
+                class="fv-fs-detail-close"
+                type="button"
+                title="隐藏详情（I）"
+                aria-label="隐藏详情"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
+            </header>
+            <dl class="fv-fs-detail-list">
+              <div><dt>文件名</dt><dd id="fs-name"></dd></div>
+              <div><dt>尺寸</dt><dd id="fs-dim"></dd></div>
+              <div><dt>大小</dt><dd id="fs-size"></dd></div>
+              <div><dt>修改时间</dt><dd id="fs-time"></dd></div>
+            </dl>
+          </aside>
+          <button id="fs-info" class="fv-fs-info" type="button" title="显示详细信息（I）" aria-label="显示详细信息">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+          </button>
+        </div>
+      </div>
+      <div id="footer" class="fv-footer" hidden></div>
+    </div>
+    <script src="assets/app.js"></script>
+  </body>
+</html>

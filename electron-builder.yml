@@ -1,0 +1,49 @@
+appId: local.fastviewer
+productName: FastViewer
+electronVersion: 44.0.0
+asar: false
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+win:
+  target:
+    - zip
+    - nsis
+  artifactName: FastViewer-${version}.${ext}
+  fileAssociations:
+    - name: FastViewer.Image
+      description: FastViewer 图片
+      ext:
+        - jpg
+        - jpeg
+        - jfif
+        - png
+        - apng
+        - gif
+        - webp
+        - avif
+        - bmp
+        - ico
+        - svg
+      role: Viewer
+    - name: FastViewer.Video
+      description: FastViewer 视频
+      ext:
+        - mp4
+        - m4v
+        - webm
+        - ogv
+        - ogg
+        - mov
+        - mkv
+      role: Viewer
+nsis:
+  oneClick: true
+  perMachine: false
+  runAfterFinish: false
+  include: build/installer.nsh
+electronLanguages:
+  - zh-CN
+  - en-US
