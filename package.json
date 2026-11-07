@@ -7,11 +7,13 @@
   "scripts": {
     "dev": "tsx scripts/build.ts && node scripts/start.ts",
     "build": "tsx scripts/build.ts",
+    "icons": "tsx scripts/file-icons.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "package": "npm run build && electron-builder --win --publish never"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "26.6.5",
     "electron": "44.0.0",
     "electron-builder": "26.15.3",

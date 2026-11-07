@@ -168,6 +168,7 @@ src/
   shared/        # 纯类型与纯函数（无 Node / Electron / DOM 依赖）
 tests/           # vitest：tests/*.test.ts + fixtures/
 scripts/         # build.ts / start.ts / bench-dir.ts / mkfixture.mjs
+build/           # 打包资源：icon.ico（7 尺寸）/ icon.png（1024 母图）/ installer.nsh
 docs/            # prd / spec / PROGRESS
 ```
 
@@ -229,8 +230,10 @@ docs/            # prd / spec / PROGRESS
 - `scripts/start.ts` 必须**清掉 `ELECTRON_RUN_AS_NODE`** 再拉起 electron（否则 Electron 退化成纯 Node，`app` 为 undefined —— web2app 已踩）。
 - 启动顺序：单实例锁 → `app.whenReady` → 读配置 → 起本地服务（端口 0）→ 建窗口（加载壳页）→ 恢复窗口 bounds → 壳页取 bootInfo → 建 webview → 内容页启动。
 - 单实例：`app.requestSingleInstanceLock()`；第二次启动 → 聚焦已有窗口，并把命令行里的目录或文件原样经主进程 `fv:open-path` 事件发给 webview guest（guest 未就绪时暂存，`did-finish-load` 后补发）；文件路径由内容页解析为“打开父目录 + 定位该文件”。
-- 打包：`electron-builder.yml` 固定 `electronVersion: 44.0.0`、`asar: false`（webview preload 不认 asar 内路径）、`win.target: [zip, nsis]`、`artifactName: FastViewer-${version}.${ext}`、`electronLanguages: [zh-CN, en-US]`、压缩级别由 `ELECTRON_BUILDER_COMPRESSION_LEVEL=3` 控制（web2app 实测 mx=3 与 mx=1 体积相同、远快于 mx=7）。默认从 GitHub 下载 Electron 发行包；网络不通时用 `-c.electronDist=<本地 electron-v<ver>-win32-x64.zip>` 复用 `%LOCALAPPDATA%\electron\Cache` 里的缓存。
-- 文件关联：NSIS 安装包按 `win.fileAssociations` 为图片与视频扩展名注册 per-user 关联（`HKCU\Software\Classes\.<ext>` → ProgID `FastViewer.Image` / `FastViewer.Video`，`shell\open\command` = `"<install>\FastViewer.exe" "%1"`）；安装器 `oneClick`、`perMachine: false`、`runAfterFinish: false`；卸载删除 ProgID 与 OpenWithProgids（`APP_UNASSOCIATE`）。electron-builder 卸载不会清扩展名默认值，`build/installer.nsh` 的 `customUnInstall` 逐扩展比对：只有当前值仍等于我们的 ProgID 才删除，避免覆盖用户后来改选的默认程序。**不写 `UserChoice`**：Windows 10 已设默认的扩展（如本机 jpg/png→照片、mp4→PotPlayer）仍由用户首次“始终使用”或在系统默认应用里确认。图标暂用 Electron 默认占位（待定项 #1）。
+- 打包：`electron-builder.yml` 固定 `electronVersion: 44.0.0`、`asar: false`（webview preload 不认 asar 内路径）、`win.target: [zip, nsis]`、`win.icon: build/icon.ico`、`artifactName: FastViewer-${version}.${ext}`、`electronLanguages: [zh-CN, en-US]`、压缩级别由 `ELECTRON_BUILDER_COMPRESSION_LEVEL=3` 控制（web2app 实测 mx=3 与 mx=1 体积相同、远快于 mx=7）。默认从 GitHub 下载 Electron 发行包；网络不通时用 `-c.electronDist=<本地 electron-v<ver>-win32-x64.zip>` 复用 `%LOCALAPPDATA%\electron\Cache` 里的缓存。
+- 应用图标：`build/icon.ico`（含 16/24/32/48/64/128/256 七尺寸）由 `docs/fvlogo.png` 直接生成——1024×1024 透明底 FV 渐变字形，原样存为 `build/icon.png` 作母图，**不加底板、不做圆角遮罩**，各尺寸由母图 LANCZOS 缩放；供 exe 资源、安装器/卸载器与 BrowserWindow 共用。`scripts/build.ts` 同时把它复制到 `dist/shell/assets/icon.ico`，`src/main/window.ts` 用它作 BrowserWindow 图标，保证开发期窗口与任务栏即显正式图标。
+- 文件类型图标：`scripts/file-icons.ts` 按统一模板生成 `build/file-icons/<ext>.svg` 与 `<ext>.ico`（16/20/24/32/40/48/64/96/128/256 多尺寸）：40×40 文件页外形 + 折角高光 + 底部白色大写扩展名，位图 `#7F56D9`、矢量图 `#12B76A`、视频 `#F04438`。SVG 供设置面板芯片（复制到 `dist/shell/assets/file-icons/`），ICO 由 `win.fileAssociations` 的 `icon` 在安装时释放到 `resources\<ext>.ico`，作为各 ProgID 的 `DefaultIcon`。
+- 文件关联：NSIS 安装包按 `win.fileAssociations` 为每个扩展名注册独立 ProgID（`HKCU\Software\Classes\.<ext>` → `FastViewer.<ext>`，`shell\open\command` = `"<install>\FastViewer.exe" "%1"`，`DefaultIcon` = `"<install>\resources\<ext>.ico"`）；安装器 `oneClick`、`perMachine: false`、`runAfterFinish: false`；卸载删除 ProgID 与 OpenWithProgids（`APP_UNASSOCIATE`）。electron-builder 卸载不会清扩展名默认值，`build/installer.nsh` 的 `customUnInstall` 逐扩展比对：只有当前值仍等于我们的 ProgID 才删除，避免覆盖用户后来改选的默认程序。**不写 `UserChoice`**：Windows 10 已设默认的扩展（如本机 jpg/png→照片、mp4→PotPlayer）仍由用户首次“始终使用”或在系统默认应用里确认。
 - 运行期开关：`app.commandLine.appendSwitch('enable-features','OverlayScrollbar')`（细滚动条）；`app.commandLine.appendSwitch('autoplay-policy','document-user-activation-required')`（避免切到视频自动出声）。
 - 调试：仅当环境变量 `FV_DEBUG_PORT` 存在时追加 `remote-debugging-port`；否则不暴露调试端口。
 
@@ -282,6 +285,7 @@ docs/            # prd / spec / PROGRESS
 | M5.1 | M5 | 配置存储与会话恢复 | ✅ |
 | M5.2 | M5 | 设置与关于面板 | ✅ |
 | M5.3 | M5 | 安装包与文件关联 | ✅ |
+| M5.4 | M5 | 文件关联设置 | ✅ |
 
 > 模块按**依赖序**排列（被依赖者在前），与 prd 的编号顺序无关——编号只是 ID。
 
@@ -323,6 +327,8 @@ flowchart TD
     M5.1 --> M5.2
     M1.5 --> M5.3
     M4.1 --> M5.3
+    M5.2 --> M5.4
+    M5.3 --> M5.4
 ```
 
 ---
@@ -639,7 +645,7 @@ GET /api/drives
 
 模块概要：
 
-- 职责：持久化配置，启动时恢复会话，提供设置/关于面板
+- 职责：持久化配置，启动时恢复会话，提供设置/关于面板与文件关联开关
 - 输入：用户操作（目录/排序/图块大小/详情浮窗）、窗口状态
 - 输出：配置文件、恢复后的 UI 状态、设置面板
 - 依赖：M4、M1
@@ -675,17 +681,52 @@ GET /api/drives
 
 #### M5.3 安装包与文件关联 ✅
 
-- **验收**：`npm run package` 产出 `release/FastViewer-0.1.0.zip`（免安装）与 `release/FastViewer-0.1.0.exe`（NSIS）；运行安装包后 `HKCU\Software\Classes\.png` 默认值指向 `FastViewer.Image`、`.mp4` 指向 `FastViewer.Video`，对应 ProgID 的 `shell\open\command` 为 `"<安装目录>\FastViewer.exe" "%1"`；资源管理器右键“打开方式”出现 FastViewer；用安装版可执行文件带一个媒体文件路径启动 → 打开父目录且查看器显示该文件；卸载后 ProgID、OpenWithProgids 与仍指向 FastViewer 的扩展名默认值一并清除；已存在 `UserChoice` 的扩展（本机 jpg/png→照片、mp4→PotPlayer）不被强行改写，用户首次“始终使用”或在系统默认应用中确认后才生效。
+- **验收**：`npm run package` 产出 `release/FastViewer-0.1.0.zip`（免安装）与 `release/FastViewer-0.1.0.exe`（NSIS）；运行安装包后 `HKCU\Software\Classes\.png` 默认值指向 `FastViewer.png`、`.mp4` 指向 `FastViewer.mp4`，对应 ProgID 的 `shell\open\command` 为 `"<安装目录>\FastViewer.exe" "%1"`、`DefaultIcon` 指向安装目录 `resources\<ext>.ico`；资源管理器在 FastViewer 为默认程序的格式上显示对应彩色扩展名图标；右键“打开方式”出现 FastViewer；用安装版可执行文件带一个媒体文件路径启动 → 打开父目录且查看器显示该文件；卸载后 ProgID、OpenWithProgids 与仍指向 FastViewer 的扩展名默认值一并清除；已存在 `UserChoice` 的扩展（本机 jpg/png→照片、mp4→PotPlayer）不被强行改写，用户首次“始终使用”或在系统默认应用中确认后才生效。
 - **依赖**：M1.5、M4.1
 
 详细设计：
 
 - 数据流：`npm run package` → `electron-builder --win` → `electron-builder.yml` 的 `win.target: [zip, nsis]` → NSIS 安装器 `APP_ASSOCIATE` 写入 `HKCU\Software\Classes`；资源管理器双击 → `FastViewer.exe "<file>"` → 主进程 CLI 解析 → 内容页 `openRequest`。
-- 接口：`electron-builder.yml` 的 `win.target`、`win.fileAssociations`、`nsis`；安装命令 `FastViewer-0.1.0.exe /S`；注册表 `HKCU\Software\Classes\.<ext>`、`...\OpenWithProgids`、`HKCU\Software\Classes\FastViewer.Image|Video\shell\open\command`。
-- 数据结构：`fileAssociations` 两组——`FastViewer.Image`（jpg jpeg jfif png apng gif webp avif bmp ico svg）、`FastViewer.Video`（mp4 m4v webm ogv ogg mov mkv）。
-- 算法与规则：NSIS `oneClick: true`、`perMachine: false`（免管理员、写 HKCU）、`runAfterFinish: false`；`artifactName: FastViewer-${version}.${ext}` 让 zip 与安装器同名不同后缀；图标用 `$appExe,0`（Electron 默认，待定项 #1）；安装器注册 `OpenWithProgids` 与扩展默认 ProgID，**不写** `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\<ext>\UserChoice`；卸载执行 `APP_UNASSOCIATE`，再由 `nsis.include: build/installer.nsh` 的 `customUnInstall` 用 `fvDropExt` 宏逐个扩展比对默认值，等于对应 ProgID 时才删除。
+- 接口：`electron-builder.yml` 的 `win.target`、`win.fileAssociations`、`nsis`；安装命令 `FastViewer-0.1.0.exe /S`；注册表 `HKCU\Software\Classes\.<ext>`、`...\OpenWithProgids`、`HKCU\Software\Classes\FastViewer.<ext>\shell\open\command`。
+- 数据结构：`fileAssociations` 每个扩展一条——`FastViewer.<ext>`（jpg jpeg jfif png apng gif webp avif bmp ico svg / mp4 m4v webm ogv ogg mov mkv），各自 `icon: build/file-icons/<ext>.ico`。
+- 算法与规则：NSIS `oneClick: true`、`perMachine: false`（免管理员、写 HKCU）、`runAfterFinish: false`；`artifactName: FastViewer-${version}.${ext}` 让 zip 与安装器同名不同后缀；exe/安装器图标用 `win.icon: build/icon.ico`，各关联 ProgID 的 `DefaultIcon` 由安装器释放到 `resources\<ext>.ico`；安装器注册 `OpenWithProgids` 与扩展默认 ProgID，**不写** `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\<ext>\UserChoice`；卸载执行 `APP_UNASSOCIATE`，再由 `nsis.include: build/installer.nsh` 的 `customUnInstall` 用 `fvDropExt` 宏逐个扩展比对默认值，等于对应 ProgID 时才删除。
 - 错误与边界：Windows 10 的 UserChoice 优先级高于 Classes 默认值——已设默认的扩展不会自动切换，这是系统保护而非缺陷；安装在非默认目录时命令写实际 `$INSTDIR`；未签名安装包可能触发 SmartScreen，需用户确认；移动/删除安装目录后关联失效，重装恢复。
 - 测试要点：无单元测试；E2E 安装 → `reg query` 校验键值与命令 → 启动安装版带文件参数并用 CDP 断言查看器显示目标文件 → 卸载 → 校验 ProgID 消失。
+
+#### M5.4 文件关联设置 ✅
+
+- **验收**：设置面板出现“文件关联”区，按 图片（jpg jpeg jfif png apng gif webp avif bmp ico svg）/ 视频（mp4 m4v webm ogv ogg mov mkv）分组列出 18 个扩展，每个扩展显示登记状态与系统默认归属；安装版中取消勾选 `.jfif` → `HKCU\Software\Classes\.jfif` 的默认值不再等于 `FastViewer.jfif` 且 `OpenWithProgids` 下对应值被移除，重新勾选 → 默认值与 `OpenWithProgids` 恢复、ProgID `shell\open\command` 指向当前 `<安装目录>\FastViewer.exe`、`DefaultIcon` 指向 `<安装目录>\resources\jfif.ico`；对系统默认已被其他程序占用的扩展（如 `.png`→照片）勾选后仍显示“系统默认：其他程序”，且不写 `UserChoice`；分组“全选/全不选”能一次切换该组所有扩展，芯片状态与注册表实际值一致（重开面板不漂移）；点“系统默认应用”打开 Windows 默认应用设置页；未打包的开发模式下列表只读并提示“安装版可修改”，不写注册表。
+- **依赖**：M5.2、M5.3
+
+详细设计：
+
+- 数据流：壳页设置面板 → `fvShell.associations()` → 主进程逐扩展读注册表 → 渲染分组芯片；点芯片/分组按钮 → `fvShell.setAssociations(exts, enabled)` → 主进程写 `HKCU\Software\Classes` → 返回最新快照 → 重新渲染；改完调用 shell 变更通知（best-effort）。
+- 接口：`fvShell.associations(): Promise<AssociationInfo>`、`setAssociations(exts: string[], enabled: boolean): Promise<AssociationInfo>`、`openDefaultApps(): Promise<void>`；主进程 `createAssociations()` 暴露 `read/set`，`reg.exe` 执行器、注册表根路径与通知回调可注入（供测试）。
+- 数据结构：
+  ```ts
+  type AssociationGroup = 'image' | 'video'
+  interface AssociationTypeInfo {
+    ext: string                 // 不含点，如 'png'
+    group: AssociationGroup
+    registered: boolean         // Classes\.ext 默认值 === FastViewer.<ext>
+    defaultApp: 'self' | 'other' | 'none'  // UserChoice\ProgId 归属（只读）
+  }
+  interface AssociationInfo {
+    editable: boolean           // app.isPackaged；开发模式只读
+    exePath: string
+    types: AssociationTypeInfo[]
+  }
+  ```
+  扩展目录、分类色与 `FastViewer.<ext>` / `<ext>.{svg,ico}` 命名在 `src/shared/associations.ts` 单一维护，顺序与 `electron-builder.yml` 的 `fileAssociations` 一致。
+- 算法与规则：
+  - 读：每个扩展查询 `Classes\.<ext>` 默认值（判断 `registered`）与 `FileExts\.<ext>\UserChoice\ProgId`（判断 `defaultApp`），并发上限 8；`registered` 只看扩展默认值，`OpenWithProgids` 不参与判定。
+  - 开：`reg add` 写 `FastViewer.<ext>` 默认描述、`DefaultIcon`（安装版为 `<resources>\<ext>.ico`，图标缺失时回退 `"<exe>",0`）、`shell\open\command = "<exe>" "%1"`，再写 `Classes\.<ext>` 默认值与 `OpenWithProgids\FastViewer.<ext>`（空 REG_SZ）。
+  - 关：仅当 `Classes\.<ext>` 默认值等于 `FastViewer.<ext>` 时删除该默认值；删除 `OpenWithProgids\FastViewer.<ext>`；**不删除 ProgID 键**（可能仍被 `UserChoice` 引用），卸载清理仍由安装器负责。
+  - 变更后 best-effort 调 `SHChangeNotify(SHCNE_ASSOCCHANGED)`（`powershell.exe` P/Invoke，失败不阻断操作）。
+  - `editable=false` 时写入直接拒绝；`exts` 只接受目录内扩展名，去重，非数组/未知扩展 → 抛错。
+  - “系统默认应用”按钮由主进程 IPC 直接 `shell.openExternal('ms-settings:defaultapps')`，固定 URL 常量。
+- 错误与边界：Windows 10 的 `UserChoice` 不可程序化写入，面板只负责“候选注册”并显示归属；写注册表失败 → 抛出错误，面板 toast 提示且保留操作前快照；`reg.exe` 查询失败/值不存在 → 视为未登记/未设置；安装目录被移动后命令指向旧路径，重新勾选即刷新；重装安装包会把全部扩展恢复为登记态。
+- 测试要点：`tests/associations.test.ts`（目录完整性、分类色映射、`reg query` 输出解析、开关命令序列、安装版 `DefaultIcon` 指向 `<ext>.ico`、只读拒绝、未知扩展拒绝、UserChoice 归属映射、18 组图标资源与 `electron-builder.yml`/`installer.nsh` 的 ProgID 一致性）；注册表集成测试使用沙箱根 `HKCU\Software\FastViewerTest\Classes` 真跑 `reg.exe` 后清理；E2E 打包版勾选/取消并 `reg query` 对照，结束后还原注册表原值。
 
 ---
 
@@ -697,7 +738,7 @@ GET /api/drives
 2. **不引入数据库**——目录索引只在内存，配置只用一个 JSON。
 3. **不做自动更新 / 更新服务器**——升级手动替换 zip。
 4. **不做多窗口 / 多标签**——单实例单窗口。
-5. **不做强制改写系统默认打开程序**——安装包只注册文件关联与“打开方式”；已存在的 `UserChoice`（如本机 jpg/png→照片、mp4→PotPlayer）由用户在系统设置中确认，不写 `UserChoice`，也不做右键菜单。
+5. **不做强制改写系统默认打开程序**——安装包只注册文件关联与“打开方式”，M5.4 设置面板同样只切换候选注册并展示 `UserChoice` 归属；已存在的默认程序（如本机 jpg/png→照片、mp4→PotPlayer）由用户在系统设置中确认，不写 `UserChoice`，也不做右键菜单。
 6. **不做跟随系统主题自动切换**——皮肤由标题栏下拉选择并持久化（含 1 套浅色）。
 7. **不做 Win11 贴靠布局浮出**（自定义标题栏按钮不触发系统 Snap Layouts）。
 8. **不做移动端 / 触屏手势**。
@@ -709,7 +750,7 @@ GET /api/drives
 
 | # | 待定 | 谁来定 | 何时必须定 | 影响 |
 |---|---|---|---|---|
-| 1 | 应用图标与品牌视觉（任务栏/窗口/关于页） | 用户 | M4.2 开工前 | 只影响图标资源与关于页展示；不影响任何验收判据（打包先用 Electron 默认图标占位） |
+| 1 | ~~应用图标与品牌视觉（任务栏/窗口/关于页）~~ 已定（2026-11-07）：按 `docs/fvlogo.png` 生成 `build/icon.ico`/`icon.png`，接入 exe、安装器、窗口与文件关联图标 | 用户 | — | 仅图标资源；关于页仍沿用文字版本信息 |
 
 ## 7. 功能实现调整日志（快道）
 
@@ -721,3 +762,6 @@ GET /api/drives
 | 2026-11-06 | 批次 4 实现调整：M3.3 错误面板拆出 `#viewer-error-name`（文件名）与 `#viewer-error-text`（原因）；15 s 未就绪 → 超时文案；出错时详情尺寸显示 `—` | `src/web/media-error.ts`、`src/web/viewer.ts`、`src/web/index.html`、`src/web/app.css` | `tests/media-error.test.ts` 5 passed；全量 18 files / 188 passed；E2E mkv/0 字节面板、重试、错误后 →、连按切换 video 数 1 且 !paused ≤1 | M3.3 验收“显示‘该视频格式无法播放’面板（含文件名与重试）/ 0 字节同一面板 / 连按 !paused ≤1 / 错误后 → 可切换” |
 | 2026-11-06 | 批次 5 实现调整：M5.1 窗口位置用 `placeWindow()`（多屏求交 + 30% 可见 + 720×480 下限）恢复；落盘改为 UI 防抖 + `ConfigStore` 立即原子写（窗口 500 ms、关闭 flush）；补齐 M1.2 的排序工具条与持久化 | `src/shared/window-placement.ts`、`src/main/window.ts`、`src/main/config.ts`、`src/main/index.ts`、`src/web/app.ts`、`src/web/index.html`、`src/web/app.css` | `tests/window-placement.test.ts` 8 + `tests/config.test.ts` 14；全量 19 files / 198 passed；E2E 图块/排序/分屏落盘、窗口移动重启还原、最大化还原、离屏回退、非法值钳制、坏 JSON 启动 | M5.1 验收“300 ms 内落盘 / 重启恢复全部状态 / 坏 JSON 默认 / 9999→320 / 2→0.8 / 副屏断开可见” |
 | 2026-11-06 | 批次 5 实现调整：M5.2 新增 `resetLayout`（tile/detail/split 补丁 + 主进程回中）/`resetPrefs`（全字段含 lastFolder null）/`about`/`revealConfig`；壳页齿轮 + 遮罩面板；重置后 `fv:config-reset` 通知内容页重读配置，prefs 额外回盘符列表 | `src/shared/reset.ts`、`src/shared/about.ts`、`src/shared/api.ts`、`src/preload/shell.ts`、`src/preload/guest.ts`、`src/main/index.ts`、`src/shell/index.ts`、`src/shell/index.html`、`src/shell/style.css`、`src/web/app.ts` | `tests/about.test.ts` 1 + `tests/reset.test.ts` 2；全量 21 files / 201 passed；E2E 版本三行、配置目录、Esc/遮罩、布局重置（tile 180 / ratio 0.45 / 详情显示 / 回中 136,86,1168,696 / 目录与排序不动）、偏好清理后重启进盘符列表 | M5.2 验收“面板显示 0.1.0 / 44.0.0 / 152.0.7977.54；打开配置目录；恢复默认布局后窗口居中、tileSize=180、详情显示、比例 0.45；清理后 lastFolder=null 且下次启动进此电脑” |
+| 2026-11-07 | 图标按更新后的 `docs/fvlogo.png` 重制：新图只剩透明字标（1080 画布，字形 bbox 1067×816），合成 1024 母图时补回深色底（横向 `#1a1a1a→#000` 渐变）并按常规 20% 圆角（205 px）切角，字形取 86% 宽居中；ICO 七尺寸与安装包重出 | `build/icon.png`、`build/icon.ico`、`docs/spec.md` | ICO 读回 7 个尺寸（16…256）；`npm run build` 后 `dist/shell/assets/icon.ico` 39399 B；dev 运行 `WM_GETICON` 取到 16×16/32×32 新图标；打包 exe 与 setup 用 `ExtractAssociatedIcon` 提取为新图标；任务栏截图可见新图标 | 待定项 #1 图标资源，不涉及 Mx.y 集合与验收判据 |
+| 2026-11-07 | 图标改版：`docs/fvlogo.png` 更新为 1024×1024 透明底 FV 字形（bbox 4,125–1015,899），按用户要求**去掉深色底板与圆角遮罩**，母图原样写入 `build/icon.png` 并由其缩放出七尺寸 ICO；安装包重出 | `build/icon.png`、`build/icon.ico`、`docs/spec.md` | ICO 读回 7 个尺寸（16…256）；`npm run build` 后 `dist/shell/assets/icon.ico` 36064 B；dev 运行 `WM_GETICON` 取到 16×16/32×32 透明字形；打包 exe 与 setup 用 `ExtractAssociatedIcon` 提取为透明字形；任务栏截图可见 | 待定项 #1 图标资源，不涉及 Mx.y 集合与验收判据 |
+| 2026-11-07 | 批次 12 新增 M5.4 文件关联设置：壳页设置面板按图片/视频分组列出 18 个扩展，芯片显示登记状态与 `UserChoice` 归属，支持单扩展与分组全选/全不选，提供“系统默认应用”入口；开发模式只读 | `src/shared/associations.ts`、`src/main/associations.ts`、`src/main/index.ts`、`src/shared/api.ts`、`src/preload/shell.ts`、`src/shell/index.html`、`src/shell/index.ts`、`src/shell/style.css`、`tests/associations.test.ts`、`tests/shell-associations.test.ts` | `npx vitest run tests/associations.test.ts tests/shell-associations.test.ts` → `Test Files 2 passed (2) / Tests 16 passed (16)`；全量 `npm test` → `Test Files 33 passed (33) / Tests 291 passed (291)`；`npm run typecheck` → 无输出（2026-11-07）。dev E2E：面板 18 芯片、只读提示与汇总 `已登记 18 / 18 个类型 · 其中 9 个是系统默认`；打包版：`.jfif` 取消 → `reg query` 默认值 `(值未设置)`、`OpenWithProgids\FastViewer.Image` 移除，重新勾选 → 恢复 `FastViewer.Image` 且 `shell\open\command` 指向当前 exe；视频组全不选/全选生效；连续 5 次读取均 18/18；验证后注册表按备份还原 | M5.4 验收“分组列出 18 扩展 / 切换 .jfif 注册表生效 / 系统默认属他程序不写 UserChoice / 分组全选全不选 / 打开默认应用页 / 开发模式只读” |

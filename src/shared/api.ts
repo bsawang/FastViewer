@@ -1,3 +1,4 @@
+import type { AssociationInfo } from './associations'
 import type { AppConfig, ConfigPatch } from './config'
 import type { ResetKind } from './reset'
 import type { ThemeName } from './theme'
@@ -26,6 +27,9 @@ export interface ShellApi {
   revealConfig(): Promise<string>
   resetLayout(): Promise<void>
   resetPrefs(): Promise<void>
+  associations(): Promise<AssociationInfo>
+  setAssociations(exts: string[], enabled: boolean): Promise<AssociationInfo>
+  openDefaultApps(): Promise<void>
   getTheme(): Promise<ThemeName>
   setTheme(theme: ThemeName): Promise<void>
   onTheme(cb: (theme: ThemeName) => void): void

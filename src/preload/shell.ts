@@ -18,6 +18,10 @@ const fvShell: ShellApi = {
   revealConfig: (): Promise<string> => ipcRenderer.invoke('shell:reveal-config'),
   resetLayout: (): Promise<void> => ipcRenderer.invoke('shell:reset-layout'),
   resetPrefs: (): Promise<void> => ipcRenderer.invoke('shell:reset-prefs'),
+  associations: () => ipcRenderer.invoke('shell:associations'),
+  setAssociations: (exts: string[], enabled: boolean) =>
+    ipcRenderer.invoke('shell:set-associations', exts, enabled),
+  openDefaultApps: (): Promise<void> => ipcRenderer.invoke('shell:open-default-apps'),
   getTheme: (): Promise<ThemeName> => ipcRenderer.invoke('shell:get-theme'),
   setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke('shell:set-theme', theme),
   onTheme: (cb: (theme: ThemeName) => void): void => {

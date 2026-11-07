@@ -1,3 +1,8 @@
+import {
+  ASSOCIATION_GROUPS,
+  type AssociationInfo,
+  type AssociationTypeInfo,
+} from '../shared/associations'
 import { DEFAULT_THEME, THEME_LABELS, isThemeName, type ThemeName } from '../shared/theme'
 
 const api = window.fvShell
@@ -158,7 +163,12 @@ const aboutApp = document.querySelector<HTMLElement>('#about-app')
 const aboutElectron = document.querySelector<HTMLElement>('#about-electron')
 const aboutChromium = document.querySelector<HTMLElement>('#about-chromium')
 const aboutConfig = document.querySelector<HTMLElement>('#about-config')
+const assocGroupsEl = document.querySelector<HTMLElement>('#assoc-groups')
+const assocNote = document.querySelector<HTMLElement>('#assoc-note')
+const assocSummary = document.querySelector<HTMLElement>('#assoc-summary')
 let toastTimer = 0
+let assocInfo: AssociationInfo | null = null
+let assocBusy = false
 
 function showToast(message: string): void {
   if (!toast) return
@@ -170,11 +180,124 @@ function showToast(message: string): void {
   }, 2400)
 }
 
+function errorText(error: unknown): string {
+  if (!(error instanceof Error)) return '未知错误'
+  return error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')
+}
+
+function associationTooltip(type: AssociationTypeInfo): string {
+  const registered = type.registered ? '已登记' : '未登记'
+  const system =
+    type.defaultApp === 'self'
+      ? '系统默认 FastViewer'
+      : type.defaultApp === 'other'
+        ? '系统默认其他程序'
+        : '系统默认未设置'
+  return `.${type.ext} · ${registered} · ${system}`
+}
+
+function renderAssociations(): void {
+  const info = assocInfo
+  if (!assocGroupsEl || !info) return
+  const types = new Map(info.types.map((type) => [type.ext, type]))
+  assocGroupsEl.replaceChildren(
+    ...ASSOCIATION_GROUPS.map((group) => {
+      const groupTypes = group.exts
+        .map((ext) => types.get(ext))
+        .filter((type): type is AssociationTypeInfo => Boolean(type))
+      const allOn = groupTypes.length > 0 && groupTypes.every((type) => type.registered)
+      const section = document.createElement('div')
+      section.className = 'fv-assoc-group'
+      const head = document.createElement('div')
+      head.className = 'fv-assoc-group-head'
+      const label = document.createElement('span')
+      label.textContent = group.label
+      const toggleAll = document.createElement('button')
+      toggleAll.type = 'button'
+      toggleAll.className = 'fv-assoc-all'
+      toggleAll.textContent = allOn ? '全不选' : '全选'
+      toggleAll.disabled = assocBusy || !info.editable
+      toggleAll.addEventListener('click', () => {
+        void applyAssociations(
+          groupTypes.map((type) => type.ext),
+          !allOn,
+        )
+      })
+      head.append(label, toggleAll)
+      const chips = document.createElement('div')
+      chips.className = 'fv-assoc-chips'
+      for (const type of groupTypes) {
+        const chip = document.createElement('button')
+        chip.type = 'button'
+        chip.className = 'fv-assoc-chip'
+        chip.setAttribute('role', 'checkbox')
+        chip.setAttribute('aria-checked', String(type.registered))
+        chip.dataset.ext = type.ext
+        chip.dataset.default = type.defaultApp
+        chip.title = associationTooltip(type)
+        const icon = document.createElement('img')
+        icon.className = 'fv-assoc-icon'
+        icon.src = `assets/file-icons/${type.ext}.svg`
+        icon.alt = ''
+        icon.draggable = false
+        chip.append(icon, document.createTextNode(`.${type.ext}`))
+        chip.disabled = assocBusy || !info.editable
+        chip.addEventListener('click', () => {
+          void applyAssociations([type.ext], !type.registered)
+        })
+        chips.append(chip)
+      }
+      section.append(head, chips)
+      return section
+    }),
+  )
+  const registered = info.types.filter((type) => type.registered).length
+  const defaults = info.types.filter((type) => type.defaultApp === 'self').length
+  if (assocSummary) {
+    assocSummary.textContent = `已登记 ${registered} / ${info.types.length} 个类型${
+      defaults > 0 ? ` · 其中 ${defaults} 个是系统默认` : ''
+    }`
+  }
+  if (assocNote) {
+    assocNote.textContent = info.editable
+      ? '勾选后该类型会出现在“打开方式”中。Windows 10 的默认程序需在系统设置中确认，本应用不会强行改写。'
+      : '开发模式只读；安装版可修改文件关联。'
+  }
+}
+
+async function loadAssociations(): Promise<void> {
+  if (assocNote) assocNote.textContent = '正在读取文件关联…'
+  try {
+    assocInfo = await api.associations()
+    renderAssociations()
+  } catch (error) {
+    if (assocNote) assocNote.textContent = '读取文件关联失败'
+    if (assocSummary) assocSummary.textContent = ''
+    showToast(`读取文件关联失败：${errorText(error)}`)
+  }
+}
+
+async function applyAssociations(exts: string[], enabled: boolean): Promise<void> {
+  if (!assocInfo?.editable || assocBusy) return
+  assocBusy = true
+  renderAssociations()
+  try {
+    assocInfo = await api.setAssociations(exts, enabled)
+    showToast(enabled ? '已登记所选文件类型' : '已取消所选文件类型')
+  } catch (error) {
+    showToast(`修改文件关联失败：${errorText(error)}`)
+  } finally {
+    assocBusy = false
+    renderAssociations()
+  }
+}
+
 async function openSettings(): Promise<void> {
   if (!settings) return
   closeThemeMenu()
   settings.hidden = false
   if (toast) toast.hidden = true
+  void loadAssociations()
   try {
     const info = await api.about()
     if (aboutApp) aboutApp.textContent = info.app
@@ -212,4 +335,9 @@ document.querySelector('#btn-reset-layout')?.addEventListener('click', () => {
 })
 document.querySelector('#btn-reset-prefs')?.addEventListener('click', () => {
   void api.resetPrefs().then(() => showToast('已清理全部偏好'))
+})
+document.querySelector('#btn-default-apps')?.addEventListener('click', () => {
+  void api.openDefaultApps().catch((error) => {
+    showToast(`打开系统设置失败：${errorText(error)}`)
+  })
 })

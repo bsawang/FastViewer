@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <path d="M0 4 C0 1.791 1.791 0 4 0 L28 0 L40 12 L40 36 C40 38.209 38.209 40 36 40 L4 40 C1.791 40 0 38.209 0 36 Z" fill="#F04438"/>
+  <path d="M28 0 L40 12 L32 12 C29.791 12 28 10.209 28 8 Z" fill="#ffffff" opacity="0.3"/>
+  <text x="20" y="33" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="14.6" font-weight="700" letter-spacing="0.2" fill="#ffffff">MOV</text>
+</svg>

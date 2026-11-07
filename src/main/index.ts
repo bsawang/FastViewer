@@ -8,6 +8,7 @@ import { buildAboutInfo } from '../shared/about'
 import { resetPatch, type ResetKind } from '../shared/reset'
 import { isThemeName, type ThemeName } from '../shared/theme'
 import { initialBounds } from '../shared/window-state'
+import { createAssociations } from './associations'
 import { ConfigStore } from './config'
 import { logger } from './logger'
 import { firstOpenTarget, type PathProbe } from './open-target'
@@ -153,6 +154,20 @@ if (!gotLock) {
       ),
     )
     ipcMain.handle('shell:reveal-config', () => shell.openPath(app.getPath('userData')))
+    const associations = createAssociations({
+      exePath: process.execPath,
+      editable: app.isPackaged,
+      iconsDir: app.isPackaged
+        ? process.resourcesPath
+        : join(app.getAppPath(), 'build/file-icons'),
+    })
+    ipcMain.handle('shell:associations', () => associations.read())
+    ipcMain.handle('shell:set-associations', (_event, exts, enabled) =>
+      associations.set(exts, enabled),
+    )
+    ipcMain.handle('shell:open-default-apps', () =>
+      shell.openExternal('ms-settings:defaultapps'),
+    )
     const resetWindow = (): void => {
       const win = BrowserWindow.getAllWindows()[0]
       if (!win || win.isDestroyed()) return

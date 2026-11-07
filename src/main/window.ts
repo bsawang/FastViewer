@@ -57,6 +57,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     title: 'FastViewer',
     titleBarStyle: 'hidden',
     autoHideMenuBar: true,
+    icon: join(__dirname, '../shell/assets/icon.ico'),
     webPreferences: {
       preload: join(__dirname, '../preload/shell.js'),
       contextIsolation: true,

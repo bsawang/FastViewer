@@ -11,32 +11,115 @@ win:
   target:
     - zip
     - nsis
+  icon: build/icon.ico
   artifactName: FastViewer-${version}.${ext}
   fileAssociations:
-    - name: FastViewer.Image
+    - name: FastViewer.jpg
       description: FastViewer 图片
+      icon: build/file-icons/jpg.ico
       ext:
         - jpg
+      role: Viewer
+    - name: FastViewer.jpeg
+      description: FastViewer 图片
+      icon: build/file-icons/jpeg.ico
+      ext:
         - jpeg
+      role: Viewer
+    - name: FastViewer.jfif
+      description: FastViewer 图片
+      icon: build/file-icons/jfif.ico
+      ext:
         - jfif
+      role: Viewer
+    - name: FastViewer.png
+      description: FastViewer 图片
+      icon: build/file-icons/png.ico
+      ext:
         - png
+      role: Viewer
+    - name: FastViewer.apng
+      description: FastViewer 图片
+      icon: build/file-icons/apng.ico
+      ext:
         - apng
+      role: Viewer
+    - name: FastViewer.gif
+      description: FastViewer 图片
+      icon: build/file-icons/gif.ico
+      ext:
         - gif
+      role: Viewer
+    - name: FastViewer.webp
+      description: FastViewer 图片
+      icon: build/file-icons/webp.ico
+      ext:
         - webp
+      role: Viewer
+    - name: FastViewer.avif
+      description: FastViewer 图片
+      icon: build/file-icons/avif.ico
+      ext:
         - avif
+      role: Viewer
+    - name: FastViewer.bmp
+      description: FastViewer 图片
+      icon: build/file-icons/bmp.ico
+      ext:
         - bmp
+      role: Viewer
+    - name: FastViewer.ico
+      description: FastViewer 图片
+      icon: build/file-icons/ico.ico
+      ext:
         - ico
+      role: Viewer
+    - name: FastViewer.svg
+      description: FastViewer 图片
+      icon: build/file-icons/svg.ico
+      ext:
         - svg
       role: Viewer
-    - name: FastViewer.Video
+    - name: FastViewer.mp4
       description: FastViewer 视频
+      icon: build/file-icons/mp4.ico
       ext:
         - mp4
+      role: Viewer
+    - name: FastViewer.m4v
+      description: FastViewer 视频
+      icon: build/file-icons/m4v.ico
+      ext:
         - m4v
+      role: Viewer
+    - name: FastViewer.webm
+      description: FastViewer 视频
+      icon: build/file-icons/webm.ico
+      ext:
         - webm
+      role: Viewer
+    - name: FastViewer.ogv
+      description: FastViewer 视频
+      icon: build/file-icons/ogv.ico
+      ext:
         - ogv
+      role: Viewer
+    - name: FastViewer.ogg
+      description: FastViewer 视频
+      icon: build/file-icons/ogg.ico
+      ext:
         - ogg
+      role: Viewer
+    - name: FastViewer.mov
+      description: FastViewer 视频
+      icon: build/file-icons/mov.ico
+      ext:
         - mov
+      role: Viewer
+    - name: FastViewer.mkv
+      description: FastViewer 视频
+      icon: build/file-icons/mkv.ico
+      ext:
         - mkv
       role: Viewer
 nsis:

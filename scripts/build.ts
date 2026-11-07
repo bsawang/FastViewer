@@ -2,12 +2,13 @@ import { build } from 'esbuild'
 import { cpSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ASSOCIATION_EXTS, associationIconFileName } from '../src/shared/associations'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const dist = join(root, 'dist')
 
 rmSync(dist, { recursive: true, force: true })
-for (const dir of ['main', 'preload', 'shell', 'web/assets']) {
+for (const dir of ['main', 'preload', 'shell', 'shell/assets', 'web/assets']) {
   mkdirSync(join(dist, dir), { recursive: true })
 }
 
@@ -67,6 +68,14 @@ async function main(): Promise<void> {
   cpSync(join(root, 'src/web/app.css'), join(dist, 'web/assets/app.css'))
   cpSync(join(root, 'src/shared/tokens.css'), join(dist, 'shell/tokens.css'))
   cpSync(join(root, 'src/shared/tokens.css'), join(dist, 'web/assets/tokens.css'))
+  cpSync(join(root, 'build/icon.ico'), join(dist, 'shell/assets/icon.ico'))
+  mkdirSync(join(dist, 'shell/assets/file-icons'), { recursive: true })
+  for (const ext of ASSOCIATION_EXTS) {
+    cpSync(
+      join(root, 'build/file-icons', associationIconFileName(ext, 'svg')),
+      join(dist, 'shell/assets/file-icons', associationIconFileName(ext, 'svg')),
+    )
+  }
 }
 
 void main()

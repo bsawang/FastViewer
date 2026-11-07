@@ -15,6 +15,7 @@
 | 9 | ✅ | M1.2✅ M1.4✅ M4.2✅ M5.1✅ | prd §M1/§M4/§M5 · 快速访问/联动滚动/圆角主题 · 已归档 |
 | 10 | ✅ | M1.2✅ M1.4✅ M4.2✅ | prd §M1/§M4 · 自绘下拉/暖色皮肤/自定义快速访问/文件夹图标/5px 高亮 · 已归档 |
 | 11 | ✅ | M1.5✅ M5.3✅ | prd §M1/§M5 · 文件参数定位 + 安装包与文件关联 · 已归档 |
+| 12 | ✅ | M5.4✅ | prd §M5 · 设置面板文件关联 · 已归档 |
 
 ## 批次 1 ✅（已归档）
 
@@ -345,3 +346,35 @@
 | F2 | 验收 ↔ 证据 ↔ 测试逐条对齐：M1.5（open-request 7 项 + 安装版 E2E 定位/高亮）；M5.3（registry 键值/命令 + 卸载清理 + 安装版 E2E）。全量 31 files / 275 passed。2026-11-07 |
 | F3 | 代码结构 ↔ spec 详细设计：`src/web/open-request.ts`、`app.ts` 的 `openRequest`/`syncViewer`、`src/main/index.ts` 的 `cliPath`/`startupPath`、`electron-builder.yml` 的 `win.fileAssociations`/`nsis`、`build/installer.nsh`——与 spec §3.3/§3.4/M1.5/M5.3 一致，无未回填偏差。2026-11-07 |
 | 收尾复验 | `npm test` → `Test Files 31 passed (31) / Tests 275 passed (275)`；`npm run typecheck` → 无输出；`npm run build` → `Done in 13ms`；产物已复制到 `release/FastViewer-0.1.0.exe`、`release/FastViewer-0.1.0.zip`（2026-11-07）。 |
+
+## 批次 12 ✅（已归档 · 需求变更）
+
+| 标签 | 内容 |
+|---|---|
+| 覆盖 | prd §M5 / spec §M5.4（新增） |
+| 依赖序 | M5.4 |
+| 档位 | 标准档（新增 M5.4；模块边界不变） |
+| M5.4 ✅ | 设置面板文件关联：18 类型分组勾选、系统默认归属、开发模式只读 |
+| RED | 反向验证（临时从 `parseRegValue` 正则移除 `SZ`）`npx vitest run tests/associations.test.ts` → `Test Files 1 failed (1) / Tests 4 failed \| 7 passed (11)`：`expected false to be true`（沙箱登记状态读回失败，2026-11-07） |
+| GREEN | `npx vitest run tests/associations.test.ts tests/shell-associations.test.ts` → `Test Files 2 passed (2) / Tests 16 passed (16)`；`npm test` → `Test Files 33 passed (33) / Tests 291 passed (291)`（2026-11-07）。dev E2E：面板 18 芯片、只读提示与汇总 `已登记 18 / 18 个类型 · 其中 9 个是系统默认`；打包版 `.jfif` 取消 → `reg query HKCU\Software\Classes\.jfif /ve` 返回 `(值未设置)`、`OpenWithProgids\FastViewer.Image` 移除；重勾 → 默认值恢复 `FastViewer.Image`、`shell\open\command` 指向当前 exe；视频组全不选/全选生效；连续 5 次 `associations()` 读取均 18/18；验证后注册表按备份还原（2026-11-07） |
+| 回写 | 新增 `src/shared/associations.ts`（分组目录 / 类型定义 / 扩展名规范化）、`src/main/associations.ts`（`parseRegValue` + `createAssociations`：并发 8 读注册表、开关写 Classes 候选注册、`UserChoice` 只读、`SHChangeNotify` best-effort、执行器与根路径可注入）；`src/main/index.ts` 注册 `shell:associations` / `shell:set-associations` / `shell:open-default-apps`；`src/shared/api.ts` + `src/preload/shell.ts` 暴露 `associations / setAssociations / openDefaultApps`；壳页 `index.html` 面板区、`index.ts` 渲染与分组切换、`style.css` 芯片样式；测试 `tests/associations.test.ts`、`tests/shell-associations.test.ts`。影响：spec §M5.4 接口改为 `createAssociations()` 只暴露 `read/set`（`openDefaultApps` 由主进程 IPC 直接 `shell.openExternal`），§5 非目标第 5 条补 M5.4 只切换候选注册的口径。 |
+| 待定 | — |
+| F2 | M5.4 验收 ↔ 证据 ↔ 测试逐条对齐：分组 18 扩展（catalog 完整性 1 项 + HTML 结构断言）；注册状态与命令序列（沙箱/假执行器 7 项）；`UserChoice` 归属映射 self/other/none；只读与非法参数拒绝；打包版 `.jfif`/视频组实机读写 + 注册表还原。全量 33 files / 291 passed。2026-11-07 |
+| F3 | 代码结构 ↔ spec 详细设计：`shared/associations.ts` 单点目录与 `electron-builder.yml` 的 `fileAssociations` 一致；`main/associations.ts` 的读并发、开关规则、ProgID 不删除、通知 best-effort 与 spec §M5.4 算法一致；壳页渲染/汇总/只读分支与验收措辞一致；§M5.4 接口表述已按实现回填。无未回填偏差。2026-11-07 |
+| 收尾复验 | `npm test` → `Test Files 33 passed (33) / Tests 291 passed (291)`；`npm run typecheck` → 无输出；`npm run build` → `Done in 12ms`（2026-11-07）。spec §M5.4 状态改 ✅、§7 追加实现调整行；prd §4 追加实现行。 |
+
+## 批次 13 ✅（已归档 · 需求变更）
+
+| 标签 | 内容 |
+|---|---|
+| 覆盖 | prd §M5 / spec §3.4、M5.3（修订）、M5.4（修订） |
+| 依赖序 | M5.3 → M5.4 |
+| 档位 | 标准档（M5.3/M5.4 验收判据细化，18 种格式独立 ProgID 与图标；模块边界不变） |
+| 需求 | 用户确认图标方案 C：40×40 文件页外形 + 折角高光 + 底部大写扩展名，位图 `#7F56D9` / 矢量图 `#12B76A` / 视频 `#F04438`；并要求安装软件时一并设置各文件类型的系统图标 |
+| RED | —（资源生成类改动，未单列失败测试；新增断言在实现后随 GREEN 一起通过） |
+| GREEN | `npm run icons` → 18 组 `<ext>.svg` + `<ext>.ico`（16/20/24/32/40/48/64/96/128/256；16–128 走 32-bit BMP、256 走 PNG 条目）；`npx vitest run tests/associations.test.ts tests/shell-associations.test.ts` → `Test Files 2 passed (2) / Tests 21 passed (21)`；`npm test` → `Test Files 33 passed (33) / Tests 294 passed (294)`；`npm run typecheck` → 无输出；`npm run build` → 通过；`npx electron-builder --win --publish never` → 产出 `release/FastViewer-0.1.0.exe` 102,430,694 B 与 `release/FastViewer-0.1.0.zip`（2026-11-07）。32 px / 128 px ICO 经 System.Drawing 解码核对形状、配色与文字方向正确 |
+| 回写 | 新增 `scripts/file-icons.ts`（模板渲染 + 自写 ICO 容器：BMP/PNG 条目、AND 掩码、预乘 alpha 还原）与 `npm run icons`；`src/shared/associations.ts` 增加 `ASSOCIATION_CATEGORIES`、`associationCategory`、`associationProgId`（`FastViewer.<ext>`）、`associationIconFileName`，分组定义去掉组级 `progId`；`src/main/associations.ts` 改按扩展名写 ProgID/扩展默认值/OpenWithProgids，新增 `iconsDir` 注入，`DefaultIcon` 指向 `<iconsDir>\<ext>.ico`（缺失回退 `"<exe>",0`）；`src/main/index.ts` 传 `process.resourcesPath`（打包）/`build/file-icons`（开发）；`electron-builder.yml` 18 条 `fileAssociations` 各带 `icon: build/file-icons/<ext>.ico`；`build/installer.nsh` 卸载比对改为 `FastViewer.<ext>`；`scripts/build.ts` 复制 SVG 到 `dist/shell/assets/file-icons/`；壳页芯片前置 16 px 图标（`src/shell/index.ts`、`style.css`）；测试补分类映射、安装版图标路径、图标资源与安装包 ProgID 一致性。影响：spec §3.4 与 M5.3/M5.4 已按独立 ProgID + 分格式图标回填。 |
+| 待定 | —（`UserChoice` 仍不可程序化改写：仅当 FastViewer 为默认程序时 Explorer 显示新图标） |
+| F2 | 验收 ↔ 证据 ↔ 测试逐条对齐：M5.3（安装包 18 条独立 ProgID + `icon` 释放到 `resources\<ext>.ico` + `DefaultIcon` 路径；`npm run icons` 产物齐全）；M5.4（面板芯片图标路径、`DefaultIcon` 写入断言、图标资源/清单/卸载脚本一致性 3 项）。全量 33 files / 294 passed。2026-11-07 |
+| F3 | 代码结构 ↔ spec 详细设计：`scripts/file-icons.ts`、`shared/associations.ts`（分类色/ProgID/文件名）、`main/associations.ts`（`iconsDir` + `iconRef`）、`electron-builder.yml`、`installer.nsh`、`shell` 芯片渲染与 `build.ts` 资源复制——与 spec §3.4/M5.3/M5.4 一致，无未回填偏差。2026-11-07 |
+| 收尾复验 | `npm test` → `Test Files 33 passed (33) / Tests 294 passed (294)`；`npm run typecheck` → 无输出；`npm run build` → 通过；`electron-builder --win` 双产物重建完成（2026-11-07）。 |
