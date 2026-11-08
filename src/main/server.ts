@@ -11,7 +11,7 @@ import type { PlaceInfo } from '../shared/places'
 export const COOKIE_NAME = 'fv'
 
 const CSP =
-  "default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'"
+  "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'"
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

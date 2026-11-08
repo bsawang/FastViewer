@@ -28,6 +28,7 @@ describe('应用内全屏浮层结构', () => {
     expect(modal).toContain('id="fs-detail"')
     expect(modal).toContain('id="fs-info"')
     expect(modal).toContain('id="fs-image"')
+    expect(modal).toContain('id="fs-file-name"')
   })
 
   it('浮层默认隐藏且为半透明模糊遮罩', () => {
@@ -40,15 +41,18 @@ describe('应用内全屏浮层结构', () => {
     expect(css).toContain('.fv-fs-modal[hidden]')
   })
 
-  it('关闭在右上角，计数器让到左上角', () => {
+  it('关闭在右上角，计数器在左下角', () => {
     const close = block(css, '.fv-fs-close')
     expect(close).toContain('top: 16px')
     expect(close).toContain('right: 16px')
     expect(close).not.toMatch(/^\s*left:/m)
     const counter = block(css, '.fv-fs-counter')
-    expect(counter).toContain('top: 18px')
+    expect(counter).toContain('bottom: 18px')
     expect(counter).toContain('left: 16px')
-    expect(counter).not.toMatch(/^\s*right:/m)
+    expect(counter).not.toMatch(/^\s*top:/m)
+    const zoom = block(css, '.fv-fs-modal .fv-viewer-zoom')
+    expect(zoom).toContain('left: 50%')
+    expect(zoom).toContain('transform: translateX(-50%)')
   })
 
   it('左右箭头为常驻圆形放大热区', () => {
@@ -59,6 +63,8 @@ describe('应用内全屏浮层结构', () => {
     expect(hot).toContain('border-radius: 50%')
     expect(hot).toMatch(/font-size:\s*(3[2-9]|[4-9]\d)px/)
     expect(hot).toMatch(/background:\s*rgba\(/)
+    expect(hot).toContain('background: rgba(18, 20, 28, 0)')
+    expect(hot).not.toContain('backdrop-filter')
     expect(hot).not.toContain('display: none')
     expect(block(css, '.fv-fs-hot--prev')).toContain('left: 16px')
     expect(block(css, '.fv-fs-hot--next')).toContain('right: 16px')

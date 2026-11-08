@@ -16,13 +16,13 @@ describe('sanitizeConfig', () => {
   })
 
   it('版本不符整体回默认', () => {
-    expect(sanitizeConfig({ version: 2, tileSize: 300 })).toEqual(CONFIG_DEFAULTS)
+    expect(sanitizeConfig({ version: 2, gridColumns: 7 })).toEqual(CONFIG_DEFAULTS)
   })
 
-  it('钳制 tileSize 并校验枚举', () => {
-    expect(sanitizeConfig({ version: 1, tileSize: 1000 }).tileSize).toBe(320)
-    expect(sanitizeConfig({ version: 1, tileSize: 10 }).tileSize).toBe(96)
-    expect(sanitizeConfig({ version: 1, tileSize: 'big' }).tileSize).toBe(180)
+  it('钳制 gridColumns 并校验枚举', () => {
+    expect(sanitizeConfig({ version: 1, gridColumns: 20 }).gridColumns).toBe(10)
+    expect(sanitizeConfig({ version: 1, gridColumns: 0 }).gridColumns).toBe(2)
+    expect(sanitizeConfig({ version: 1, gridColumns: 'many' }).gridColumns).toBe(4)
     expect(sanitizeConfig({ version: 1, sort: { key: 'x', order: 'up' } }).sort).toEqual({
       key: 'name',
       order: 'asc',
@@ -50,12 +50,12 @@ describe('sanitizeConfig', () => {
   it('单字段非法不影响其他字段', () => {
     const config = sanitizeConfig({
       version: 1,
-      tileSize: 'huge',
+      gridColumns: 'huge',
       lastFolder: 'E:\\pics',
       splitRatio: 0.6,
       window: { x: 'a', y: 0, width: 800, height: 600 },
     })
-    expect(config.tileSize).toBe(180)
+    expect(config.gridColumns).toBe(4)
     expect(config.lastFolder).toBe('E:\\pics')
     expect(config.splitRatio).toBe(0.6)
     expect(config.window).toBeNull()
@@ -87,12 +87,12 @@ describe('ConfigStore', () => {
   it('patch 写入磁盘并可重新加载', () => {
     const file = tempFile()
     const store = new ConfigStore(file)
-    store.patch({ tileSize: 196, lastFolder: 'E:\\work' })
+    store.patch({ gridColumns: 7, lastFolder: 'E:\\work' })
 
     const saved = JSON.parse(readFileSync(file, 'utf8'))
-    expect(saved.tileSize).toBe(196)
+    expect(saved.gridColumns).toBe(7)
     expect(saved.lastFolder).toBe('E:\\work')
-    expect(new ConfigStore(file).get()).toMatchObject({ tileSize: 196, lastFolder: 'E:\\work' })
+    expect(new ConfigStore(file).get()).toMatchObject({ gridColumns: 7, lastFolder: 'E:\\work' })
   })
 
   it('sort 局部补丁保留另一字段', () => {
@@ -107,10 +107,10 @@ describe('ConfigStore', () => {
   it('越界补丁被钳制后再落盘', () => {
     const file = tempFile()
     const store = new ConfigStore(file)
-    store.patch({ tileSize: 9999 })
+    store.patch({ gridColumns: 99 })
 
-    expect(store.get().tileSize).toBe(320)
-    expect(JSON.parse(readFileSync(file, 'utf8')).tileSize).toBe(320)
+    expect(store.get().gridColumns).toBe(10)
+    expect(JSON.parse(readFileSync(file, 'utf8')).gridColumns).toBe(10)
   })
 
   it('window 补丁写入并可重新加载', () => {

@@ -25,12 +25,12 @@
   --gap-3: 12px;
   --gap-4: 16px;
 
-  --fs-12: 12px;
+  --fs-12: 10px;
   --fs-13: 13.5px;
   --fs-15: 15px;
   --fs-20: 20px;
 
-  --font-ui: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-ui: 'FastViewer Sans', 'PingFang SC', 'PingFang HK', 'Microsoft YaHei', sans-serif;
 
   --t-hover: 120ms;
   --t-pop: 140ms;

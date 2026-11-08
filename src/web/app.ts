@@ -1,14 +1,17 @@
 import { collapseBreadcrumb, parseBreadcrumb, type CrumbSegment } from './breadcrumb'
+import { ContextMenu, type ContextMenuItem } from './context-menu'
 import { FullscreenLayer } from './fullscreen'
 import { Grid, type GridItem } from './grid'
-import { TILE_MAX, TILE_MIN, TILE_STEP, clampTileSize } from './grid-math'
+import { clampColumns } from './grid-math'
 import { resolveKeyAction } from './keymap'
 import { buildMediaSeq } from './media-seq'
 import { findMediaIndex, parentOf } from './open-request'
+import { ConfirmDialog, NameDialog } from './name-dialog'
+import { ThumbnailService } from './thumbnails'
 import { Viewer } from './viewer'
 import { SPLIT_DEFAULT, clampSplitRatio, splitWidths } from '../shared/split'
 import { folderTitle } from '../shared/path-title'
-import type { SortKey, SortOrder } from '../shared/config'
+import { GRID_COLUMNS_MAX, GRID_COLUMNS_MIN, type SortKey, type SortOrder } from '../shared/config'
 import type { DriveInfo } from '../shared/drives'
 import type { PlaceInfo } from '../shared/places'
 import type { ThemeName } from '../shared/theme'
@@ -24,10 +27,11 @@ const footer = document.getElementById('footer') as HTMLElement
 const crumbBar = document.getElementById('crumbs') as HTMLElement
 const crumbList = document.getElementById('crumb-list') as HTMLElement
 const toolbar = document.getElementById('toolbar') as HTMLElement
-const tileSlider = document.getElementById('tile-size') as HTMLInputElement
-const tileSmaller = document.getElementById('tile-smaller') as HTMLButtonElement
-const tileLarger = document.getElementById('tile-larger') as HTMLButtonElement
-const tileValue = document.getElementById('tile-size-value') as HTMLElement
+const columnsSlider = document.getElementById('grid-columns') as HTMLInputElement
+const columnsSmaller = document.getElementById('columns-smaller') as HTMLButtonElement
+const columnsLarger = document.getElementById('columns-larger') as HTMLButtonElement
+const columnsValue = document.getElementById('grid-columns-value') as HTMLElement
+const backTop = document.getElementById('back-top') as HTMLButtonElement
 const sortButtons: Record<SortKey, HTMLButtonElement> = {
   name: document.getElementById('sort-name') as HTMLButtonElement,
   mtime: document.getElementById('sort-mtime') as HTMLButtonElement,
@@ -36,6 +40,10 @@ const sortButtons: Record<SortKey, HTMLButtonElement> = {
 const sortOrderButton = document.getElementById('sort-order') as HTMLButtonElement
 
 const grid = new Grid()
+const thumbnails = new ThumbnailService()
+const contextMenu = new ContextMenu()
+const nameDialog = new NameDialog()
+const confirmDialog = new ConfirmDialog()
 const nameCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
 
 let currentPath = ''
@@ -49,6 +57,8 @@ let menu: HTMLElement | null = null
 let persistTimer = 0
 let lastErrorCode: string | null = null
 let dragDepth = 0
+let hasClipboard = false
+let footerFlashTimer = 0
 
 let splitRatio = SPLIT_DEFAULT
 let detailOpen = true
@@ -60,6 +70,7 @@ const viewer = new Viewer(
   {
     root: document.getElementById('viewer') as HTMLElement,
     empty: document.getElementById('viewer-empty') as HTMLElement,
+    name: document.getElementById('viewer-name') as HTMLElement,
     stage: document.getElementById('viewer-stage') as HTMLElement,
     image: document.getElementById('viewer-image') as HTMLImageElement,
     video: document.getElementById('viewer-video') as HTMLVideoElement,
@@ -72,7 +83,19 @@ const viewer = new Viewer(
     detail: document.getElementById('viewer-detail') as HTMLElement,
     detailClose: document.getElementById('detail-close') as HTMLButtonElement,
     detailName: document.getElementById('detail-name') as HTMLElement,
+    detailFormat: document.getElementById('detail-format') as HTMLElement,
     detailDim: document.getElementById('detail-dim') as HTMLElement,
+    detailPixelsRow: document.getElementById('detail-pixels-row') as HTMLElement,
+    detailPixels: document.getElementById('detail-pixels') as HTMLElement,
+    detailDurationRow: document.getElementById('detail-duration-row') as HTMLElement,
+    detailDuration: document.getElementById('detail-duration') as HTMLElement,
+    detailBitrateRow: document.getElementById('detail-bitrate-row') as HTMLElement,
+    detailBitrate: document.getElementById('detail-bitrate') as HTMLElement,
+    detailExif: document.getElementById('detail-exif') as HTMLElement,
+    detailStream: document.getElementById('detail-stream') as HTMLElement,
+    mini: document.getElementById('viewer-mini') as HTMLElement,
+    miniBody: document.getElementById('viewer-mini-body') as HTMLElement,
+    miniClose: document.getElementById('viewer-mini-close') as HTMLButtonElement,
     detailSize: document.getElementById('detail-size') as HTMLElement,
     detailTime: document.getElementById('detail-time') as HTMLElement,
     info: document.getElementById('viewer-info') as HTMLButtonElement,
@@ -81,6 +104,7 @@ const viewer = new Viewer(
     zoomFitButton: document.getElementById('zoom-fit') as HTMLButtonElement,
     zoomActualButton: document.getElementById('zoom-actual') as HTMLButtonElement,
     videoControls: document.getElementById('video-controls') as HTMLElement,
+    videoCenter: document.getElementById('video-center') as HTMLButtonElement,
     videoPlay: document.getElementById('video-play') as HTMLButtonElement,
     videoTime: document.getElementById('video-time') as HTMLElement,
     videoTrack: document.getElementById('video-track') as HTMLElement,
@@ -110,6 +134,7 @@ const fullscreen = new FullscreenLayer(
     modal: document.getElementById('fs-modal') as HTMLElement,
     stage: document.getElementById('fs-stage') as HTMLElement,
     image: document.getElementById('fs-image') as HTMLImageElement,
+    fileName: document.getElementById('fs-file-name') as HTMLElement,
     close: document.getElementById('fs-close') as HTMLButtonElement,
     prev: document.getElementById('fs-prev') as HTMLButtonElement,
     next: document.getElementById('fs-next') as HTMLButtonElement,
@@ -118,7 +143,13 @@ const fullscreen = new FullscreenLayer(
     detail: document.getElementById('fs-detail') as HTMLElement,
     detailClose: document.getElementById('fs-detail-close') as HTMLButtonElement,
     detailName: document.getElementById('fs-name') as HTMLElement,
+    detailFormat: document.getElementById('fs-format') as HTMLElement,
     detailDim: document.getElementById('fs-dim') as HTMLElement,
+    detailPixels: document.getElementById('fs-pixels') as HTMLElement,
+    detailExif: document.getElementById('fs-exif') as HTMLElement,
+    mini: document.getElementById('fs-mini') as HTMLElement,
+    miniBody: document.getElementById('fs-mini-body') as HTMLElement,
+    miniClose: document.getElementById('fs-mini-close') as HTMLButtonElement,
     detailSize: document.getElementById('fs-size') as HTMLElement,
     detailTime: document.getElementById('fs-time') as HTMLElement,
     info: document.getElementById('fs-info') as HTMLButtonElement,
@@ -143,6 +174,16 @@ function openFullscreen(): void {
   fullscreen.open(sequence, viewer.getState().index, detailOpen)
   window.fvHost?.setImmersive(true)
   publishState()
+}
+
+function openFullscreenAt(index: number): void {
+  const item = items[index]
+  if (!item || item.kind !== 'image') return
+  const sequence = buildMediaSeq(items)
+  const at = sequence.findIndex((entry) => entry.path === item.path)
+  if (at < 0) return
+  viewer.open(sequence, at, detailOpen)
+  openFullscreen()
 }
 
 function closeFullscreen(): void {
@@ -198,6 +239,19 @@ function showFooter(message: string, retry?: () => void): void {
 function hideFooter(): void {
   footer.hidden = true
   footer.replaceChildren()
+}
+
+function flashFooter(message: string): void {
+  showFooter(message)
+  if (footerFlashTimer) window.clearTimeout(footerFlashTimer)
+  footerFlashTimer = window.setTimeout(() => {
+    footerFlashTimer = 0
+    hideFooter()
+  }, 2200)
+}
+
+function leafName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
 }
 
 function publishState(): void {
@@ -332,26 +386,25 @@ function bindSplit(): void {
   })
 }
 
-function updateToolbar(size: number): void {
-  tileSlider.value = String(size)
-  tileValue.textContent = String(size)
-  tileSmaller.disabled = size <= TILE_MIN
-  tileLarger.disabled = size >= TILE_MAX
-  document.documentElement.dataset.tileSize = String(size)
+function updateToolbar(columns: number): void {
+  columnsSlider.value = String(columns)
+  columnsValue.textContent = String(columns)
+  columnsSmaller.disabled = columns <= GRID_COLUMNS_MIN
+  columnsLarger.disabled = columns >= GRID_COLUMNS_MAX
 }
 
-function persistTileSize(size: number): void {
+function persistColumns(columns: number): void {
   window.clearTimeout(persistTimer)
   persistTimer = window.setTimeout(() => {
-    void window.fvHost?.patchConfig({ tileSize: size })
+    void window.fvHost?.patchConfig({ gridColumns: columns })
   }, 150)
 }
 
-function applyTileSize(value: number, persist = true): void {
-  const next = clampTileSize(value)
-  if (next !== grid.getTileSize()) grid.setTileSize(next)
+function applyColumns(value: number, persist = true): void {
+  const next = clampColumns(value)
+  if (next !== grid.getColumns()) grid.setColumns(next)
   updateToolbar(next)
-  if (persist) persistTileSize(next)
+  if (persist) persistColumns(next)
 }
 
 function updateSortUi(): void {
@@ -373,7 +426,7 @@ function applySort(next: { key?: SortKey; order?: SortOrder }): void {
 }
 
 function bindToolbar(): void {
-  updateToolbar(grid.getTileSize())
+  updateToolbar(grid.getColumns())
   updateSortUi()
   for (const key of ['name', 'mtime', 'size'] as SortKey[]) {
     sortButtons[key].addEventListener('click', () => applySort({ key }))
@@ -381,24 +434,35 @@ function bindToolbar(): void {
   sortOrderButton.addEventListener('click', () => {
     applySort({ order: sort.order === 'asc' ? 'desc' : 'asc' })
   })
-  tileSmaller.addEventListener('click', () => {
-    applyTileSize(grid.getTileSize() - TILE_STEP)
+  columnsSmaller.addEventListener('click', () => {
+    applyColumns(grid.getColumns() - 1)
   })
-  tileLarger.addEventListener('click', () => {
-    applyTileSize(grid.getTileSize() + TILE_STEP)
+  columnsLarger.addEventListener('click', () => {
+    applyColumns(grid.getColumns() + 1)
   })
-  tileSlider.addEventListener('input', () => {
-    applyTileSize(Number(tileSlider.value))
+  columnsSlider.addEventListener('input', () => {
+    applyColumns(Number(columnsSlider.value))
   })
   wall.addEventListener(
     'wheel',
     (event) => {
       if (!event.ctrlKey) return
       event.preventDefault()
-      applyTileSize(grid.getTileSize() + (event.deltaY < 0 ? TILE_STEP : -TILE_STEP))
+      applyColumns(grid.getColumns() + (event.deltaY < 0 ? -1 : 1))
     },
     { passive: false },
   )
+}
+
+function bindBackTop(): void {
+  const sync = (): void => {
+    backTop.hidden = wall.scrollTop < 480
+  }
+  wall.addEventListener('scroll', sync, { passive: true })
+  backTop.addEventListener('click', () => {
+    wall.scrollTo({ top: 0, behavior: 'smooth' })
+  })
+  sync()
 }
 
 async function fetchPage(path: string, offset: number): Promise<DirResponse> {
@@ -625,6 +689,111 @@ async function openRequest(path: string): Promise<boolean> {
   return true
 }
 
+async function copyItem(item: GridItem): Promise<void> {
+  const result = await window.fvHost?.copyEntry(item.path)
+  if (!result) return
+  if (!result.ok) {
+    flashFooter(result.message)
+    return
+  }
+  hasClipboard = true
+  flashFooter(`已复制「${item.name}」`)
+}
+
+async function renameItem(item: GridItem): Promise<void> {
+  const name = await nameDialog.ask({
+    title: '重命名',
+    label: '新名称',
+    initial: item.name,
+    selectBase: item.ext !== undefined,
+  })
+  if (!name || name === item.name) return
+  const result = await window.fvHost?.renameEntry(item.path, name)
+  if (!result) return
+  if (!result.ok) {
+    flashFooter(result.message)
+    return
+  }
+  await openDir(currentPath, true)
+  flashFooter('已重命名')
+}
+
+async function revealItem(item: GridItem): Promise<void> {
+  const result = await window.fvHost?.revealEntry(item.path)
+  if (!result) return
+  if (!result.ok) flashFooter(result.message)
+}
+
+async function deleteItem(item: GridItem): Promise<void> {
+  const confirmed = await confirmDialog.ask({
+    title: '删除',
+    message: `确定将「${item.name}」移到回收站？`,
+    confirmText: '删除',
+    danger: true,
+  })
+  if (!confirmed) return
+  const result = await window.fvHost?.trashEntry(item.path)
+  if (!result) return
+  if (!result.ok) {
+    flashFooter(result.message)
+    return
+  }
+  await openDir(currentPath, true)
+  flashFooter(`已删除「${item.name}」`)
+}
+
+async function createNewFolder(): Promise<void> {
+  if (!currentPath) return
+  const name = await nameDialog.ask({
+    title: '新建文件夹',
+    label: '文件夹名称',
+    confirmText: '创建',
+  })
+  if (!name) return
+  const result = await window.fvHost?.createFolder(currentPath, name)
+  if (!result) return
+  if (!result.ok) {
+    flashFooter(result.message)
+    return
+  }
+  await openDir(currentPath, true)
+  flashFooter(`已新建文件夹「${leafName(result.path ?? name)}」`)
+}
+
+async function pasteEntry(): Promise<void> {
+  if (!currentPath) return
+  const result = await window.fvHost?.pasteEntry(currentPath)
+  if (!result) return
+  if (!result.ok) {
+    flashFooter(result.message)
+    return
+  }
+  await openDir(currentPath, true)
+  flashFooter(`已粘贴「${leafName(result.path ?? '')}」`)
+}
+
+function showItemMenu(index: number, x: number, y: number): void {
+  const item = items[index]
+  if (!item) return
+  if (currentPath === '' || item.name === '返回上级') return
+  const entries: ContextMenuItem[] = []
+  if (item.kind === 'image') {
+    entries.push({ label: '复制', action: () => void copyItem(item) })
+    entries.push({ label: '在文件浏览器中打开', action: () => void revealItem(item) })
+  }
+  entries.push({ label: '重命名', action: () => void renameItem(item) })
+  entries.push({ label: '删除', danger: true, action: () => void deleteItem(item) })
+  contextMenu.show(x, y, entries)
+}
+
+function showBlankMenu(x: number, y: number): void {
+  if (currentPath === '') return
+  contextMenu.show(x, y, [
+    { label: '新建文件夹', action: () => void createNewFolder() },
+    { label: '粘贴', disabled: !hasClipboard, action: () => void pasteEntry() },
+  ])
+}
+
 function bindDrop(): void {
   window.addEventListener('dragenter', (event) => {
     event.preventDefault()
@@ -658,7 +827,7 @@ async function applyReset(kind: 'layout' | 'prefs'): Promise<void> {
   const next = await window.fvHost?.getConfig().catch(() => null)
   if (next) {
     applyTheme(next.theme)
-    applyTileSize(next.tileSize, false)
+    applyColumns(next.gridColumns, false)
     splitRatio = next.splitRatio
     detailOpen = next.detailOpen
     if (viewer.isOpen()) viewer.setDetailOpen(next.detailOpen, false)
@@ -685,14 +854,19 @@ async function boot(): Promise<void> {
         publishState()
       }
     },
+    onDoubleClick: (index) => openFullscreenAt(index),
+    onContextMenu: (index, x, y) => showItemMenu(index, x, y),
+    onBlankContextMenu: (x, y) => showBlankMenu(x, y),
     onLoadMore: () => {
       void loadMore()
     },
+    getThumbnail: (item, signal) => thumbnails.get(item, signal),
   })
   layoutSplit()
 
   document.addEventListener('click', () => hideMenu())
   bindToolbar()
+  bindBackTop()
   bindSplit()
   bindDrop()
   window.fvHost?.onOpenPath((path) => {
@@ -706,7 +880,7 @@ async function boot(): Promise<void> {
   const config = await window.fvHost?.getConfig().catch(() => null)
   if (config) {
     applyTheme(config.theme)
-    applyTileSize(config.tileSize, false)
+    applyColumns(config.gridColumns, false)
     splitRatio = config.splitRatio
     detailOpen = config.detailOpen
     sort = { ...config.sort }

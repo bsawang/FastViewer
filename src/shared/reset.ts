@@ -5,7 +5,7 @@ export type ResetKind = 'layout' | 'prefs'
 
 export function resetLayoutPatch(): ConfigPatch {
   return {
-    tileSize: CONFIG_DEFAULTS.tileSize,
+    gridColumns: CONFIG_DEFAULTS.gridColumns,
     detailOpen: CONFIG_DEFAULTS.detailOpen,
     splitRatio: CONFIG_DEFAULTS.splitRatio,
   }
@@ -15,7 +15,7 @@ export function resetPrefsPatch(): ConfigPatch {
   return {
     lastFolder: null,
     sort: { ...CONFIG_DEFAULTS.sort },
-    tileSize: CONFIG_DEFAULTS.tileSize,
+    gridColumns: CONFIG_DEFAULTS.gridColumns,
     detailOpen: CONFIG_DEFAULTS.detailOpen,
     splitRatio: CONFIG_DEFAULTS.splitRatio,
     theme: CONFIG_DEFAULTS.theme,

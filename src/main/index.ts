@@ -3,6 +3,7 @@ import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, ipcMain, Menu, screen, shell, webContents } from 'electron'
+import type { FsResult } from '../shared/api'
 import type { WindowPlacement } from '../shared/config'
 import { buildAboutInfo } from '../shared/about'
 import { resetPatch, type ResetKind } from '../shared/reset'
@@ -10,14 +11,22 @@ import { isThemeName, type ThemeName } from '../shared/theme'
 import { initialBounds } from '../shared/window-state'
 import { createAssociations } from './associations'
 import { ConfigStore } from './config'
+import {
+  FileOpError,
+  copyEntry,
+  createFolder,
+  pasteEntry,
+  renameEntry,
+} from './file-ops'
 import { logger } from './logger'
 import { firstOpenTarget, type PathProbe } from './open-target'
+import { checkAbsolutePath } from './path-guard'
 import { listPlaces, listQuickAccessPlaces, mergePlaces } from './places'
 import { startLocalServer, type LocalServer } from './server'
 import { createMainWindow, flushWindowPlacement, getWindowState, setupWindowIpc } from './window'
 
 app.commandLine.appendSwitch('enable-features', 'OverlayScrollbar')
-app.commandLine.appendSwitch('autoplay-policy', 'document-user-activation-required')
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 const debugPort = process.env.FV_DEBUG_PORT
 if (debugPort) app.commandLine.appendSwitch('remote-debugging-port', debugPort)
@@ -200,6 +209,73 @@ if (!gotLock) {
       const win = BrowserWindow.getAllWindows()[0]
       if (!win || win.isDestroyed()) return
       win.webContents.send('shell:immersive', Boolean(on))
+    })
+    const fsFailure = (error: unknown): string => {
+      if (error instanceof FileOpError) return error.message
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code?: unknown }).code)
+          : ''
+      if (code === 'ENOENT') return '文件或文件夹不存在'
+      if (code === 'EACCES' || code === 'EPERM' || code === 'EBUSY') {
+        return '没有权限，文件可能被占用'
+      }
+      return '操作失败'
+    }
+    const runFs = async (task: () => Promise<string | undefined>): Promise<FsResult> => {
+      try {
+        return { ok: true, path: await task() }
+      } catch (error) {
+        logger.warn('file operation failed', String(error))
+        return { ok: false, message: fsFailure(error) }
+      }
+    }
+    ipcMain.handle('fv:fs-copy', (_event, input: unknown) =>
+      runFs(async () => {
+        if (typeof input !== 'string') throw new FileOpError('路径无效')
+        await copyEntry(input)
+      }),
+    )
+    ipcMain.handle('fv:fs-paste', (_event, dir: unknown) =>
+      runFs(async () => {
+        if (typeof dir !== 'string') throw new FileOpError('路径无效')
+        return pasteEntry(dir)
+      }),
+    )
+    ipcMain.handle('fv:fs-rename', (_event, input: unknown, name: unknown) =>
+      runFs(async () => {
+        if (typeof input !== 'string' || typeof name !== 'string') {
+          throw new FileOpError('参数无效')
+        }
+        return renameEntry(input, name)
+      }),
+    )
+    ipcMain.handle('fv:fs-mkdir', (_event, dir: unknown, name: unknown) =>
+      runFs(async () => {
+        if (typeof dir !== 'string' || typeof name !== 'string') {
+          throw new FileOpError('参数无效')
+        }
+        return createFolder(dir, name)
+      }),
+    )
+    ipcMain.handle('fv:fs-trash', async (_event, input: unknown): Promise<FsResult> => {
+      if (typeof input !== 'string') return { ok: false, message: '路径无效' }
+      const checked = checkAbsolutePath(input)
+      if (!checked.ok) return { ok: false, message: checked.message }
+      try {
+        await shell.trashItem(checked.path)
+        return { ok: true }
+      } catch (error) {
+        logger.warn('trash failed', String(error))
+        return { ok: false, message: '删除失败，文件可能被占用' }
+      }
+    })
+    ipcMain.handle('fv:fs-reveal', async (_event, input: unknown): Promise<FsResult> => {
+      if (typeof input !== 'string') return { ok: false, message: '路径无效' }
+      const checked = checkAbsolutePath(input)
+      if (!checked.ok) return { ok: false, message: checked.message }
+      shell.showItemInFolder(checked.path)
+      return { ok: true }
     })
     const initialPath = cliPath(process.argv)
     if (initialPath) logger.info('cli path', initialPath)

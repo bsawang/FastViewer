@@ -9,6 +9,7 @@ export function formatTime(seconds: number): string {
 
 export interface VideoControlElements {
   controls: HTMLElement
+  center: HTMLButtonElement
   play: HTMLButtonElement
   time: HTMLElement
   track: HTMLElement
@@ -36,6 +37,8 @@ export class VideoController {
     this.el = elements
 
     this.el.play.addEventListener('click', () => this.togglePlay())
+    this.el.center.addEventListener('click', () => this.play())
+    video.addEventListener('click', () => this.togglePlay())
     this.el.mute.addEventListener('click', () => this.toggleMute())
     this.el.volume.addEventListener('input', () => {
       this.setVolume(Number(this.el.volume.value) / 100)
@@ -75,18 +78,22 @@ export class VideoController {
     video.addEventListener('play', () => {
       if (!this.active) return
       this.el.play.textContent = '暂停'
+      this.el.center.hidden = true
       this.el.replay.hidden = true
       this.startRaf()
     })
     video.addEventListener('pause', () => {
       if (!this.active) return
       this.el.play.textContent = '播放'
+      if (video.ended) this.el.center.hidden = true
+      else this.el.center.hidden = false
       this.stopRaf()
       this.render(this.scrubbing ? this.preview : this.video.currentTime)
     })
     video.addEventListener('ended', () => {
       if (!this.active) return
       this.el.play.textContent = '播放'
+      this.el.center.hidden = true
       this.el.replay.hidden = false
       this.stopRaf()
       this.render(this.duration)
@@ -105,6 +112,7 @@ export class VideoController {
     this.scrubbing = false
     this.seekable = false
     this.el.controls.hidden = false
+    this.el.center.hidden = false
     this.el.replay.hidden = true
     this.el.play.textContent = '播放'
     this.el.track.classList.remove('is-disabled')
@@ -123,13 +131,19 @@ export class VideoController {
     this.video.removeAttribute('src')
     this.video.load()
     this.el.controls.hidden = true
+    this.el.center.hidden = true
     this.el.replay.hidden = true
   }
 
   play(): void {
     if (!this.active) return
     const started = this.video.play()
-    if (started) void started.catch(() => this.el.play.textContent = '播放')
+    if (started) {
+      void started.catch(() => {
+        this.el.play.textContent = '播放'
+        this.el.center.hidden = false
+      })
+    }
   }
 
   pause(): void {

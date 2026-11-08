@@ -16,7 +16,7 @@ export interface AppConfig {
   version: 1
   lastFolder: string | null
   sort: { key: SortKey; order: SortOrder }
-  tileSize: number
+  gridColumns: number
   detailOpen: boolean
   splitRatio: number
   theme: ThemeName
@@ -26,22 +26,21 @@ export interface AppConfig {
 export interface ConfigPatch {
   lastFolder?: string | null
   sort?: { key?: SortKey; order?: SortOrder }
-  tileSize?: number
+  gridColumns?: number
   detailOpen?: boolean
   splitRatio?: number
   theme?: ThemeName
   window?: WindowPlacement | null
 }
 
-export const TILE_SIZE_MIN = 96
-export const TILE_SIZE_MAX = 320
-export const TILE_SIZE_STEP = 16
+export const GRID_COLUMNS_MIN = 2
+export const GRID_COLUMNS_MAX = 10
 
 export const CONFIG_DEFAULTS: AppConfig = {
   version: 1,
   lastFolder: null,
   sort: { key: 'name', order: 'asc' },
-  tileSize: 180,
+  gridColumns: 4,
   detailOpen: true,
   splitRatio: SPLIT_DEFAULT,
   theme: DEFAULT_THEME,

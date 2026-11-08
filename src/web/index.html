@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; img-src 'self' data: blob:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'"
     />
     <title>FastViewer</title>
     <link rel="stylesheet" href="assets/tokens.css" />
@@ -24,14 +24,17 @@
               <button id="sort-size" class="fv-toolbar-button fv-sort-button" type="button" title="按文件大小排序">大小</button>
               <button id="sort-order" class="fv-toolbar-button" type="button" title="切换正序 / 倒序">↑</button>
             </div>
-            <div class="fv-toolbar-group" role="group" aria-label="图块大小">
-              <button id="tile-smaller" class="fv-toolbar-button" type="button" title="缩小图块" aria-label="缩小图块">−</button>
-              <input id="tile-size" class="fv-tile-range" type="range" min="96" max="320" step="4" aria-label="图块大小" />
-              <button id="tile-larger" class="fv-toolbar-button" type="button" title="放大图块" aria-label="放大图块">+</button>
-              <span id="tile-size-value" class="fv-tile-value" title="当前图块尺寸">180</span>
+            <div class="fv-toolbar-group" role="group" aria-label="每行列数">
+              <button id="columns-smaller" class="fv-toolbar-button" type="button" title="减少列数（图块变大）" aria-label="减少列数">−</button>
+              <input id="grid-columns" class="fv-tile-range" type="range" min="2" max="10" step="1" aria-label="每行列数" />
+              <button id="columns-larger" class="fv-toolbar-button" type="button" title="增加列数（图块变小）" aria-label="增加列数">+</button>
+              <span id="grid-columns-value" class="fv-tile-value" title="每行列数">4</span>
             </div>
           </div>
           <div id="wall" class="fv-wall"></div>
+          <button id="back-top" class="fv-back-top" type="button" title="返回顶部" aria-label="返回顶部" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 11.25 7.5-7.5 7.5 7.5M12 3.75v16.5" /></svg>
+          </button>
         </div>
         <div
           id="split"
@@ -45,9 +48,13 @@
           <div id="viewer-empty" class="fv-viewer-empty" hidden>
             <span>没有可查看的图片或视频</span>
           </div>
+          <div id="viewer-name" class="fv-viewer-name" hidden></div>
           <div id="viewer-stage" class="fv-viewer-stage">
             <img id="viewer-image" class="fv-viewer-media" alt="" hidden />
-            <video id="viewer-video" class="fv-viewer-media" hidden></video>
+            <video id="viewer-video" class="fv-viewer-media" preload="metadata" playsinline hidden></video>
+            <button id="video-center" class="fv-video-center" type="button" title="播放（Space）" aria-label="播放" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
+            </button>
             <div id="viewer-loading" class="fv-viewer-loading" hidden>
               <span class="fv-spinner" aria-hidden="true"></span>
               <span>加载中…</span>
@@ -123,10 +130,22 @@
             </header>
             <dl class="fv-detail-list">
               <div><dt>文件名</dt><dd id="detail-name"></dd></div>
+              <div><dt>格式</dt><dd id="detail-format"></dd></div>
               <div><dt>尺寸</dt><dd id="detail-dim"></dd></div>
+              <div id="detail-pixels-row"><dt>总像素</dt><dd id="detail-pixels"></dd></div>
+              <div id="detail-duration-row" hidden><dt>时长</dt><dd id="detail-duration"></dd></div>
+              <div id="detail-bitrate-row" hidden><dt>平均码率</dt><dd id="detail-bitrate"></dd></div>
               <div><dt>大小</dt><dd id="detail-size"></dd></div>
               <div><dt>修改时间</dt><dd id="detail-time"></dd></div>
             </dl>
+            <div id="detail-exif" class="fv-detail-list fv-detail-extra" hidden></div>
+            <div id="detail-stream" class="fv-detail-list fv-detail-extra" hidden></div>
+          </aside>
+          <aside id="viewer-mini" class="fv-mini" hidden>
+            <div id="viewer-mini-body" class="fv-mini-body"></div>
+            <button id="viewer-mini-close" class="fv-mini-close" type="button" title="关闭" aria-label="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
           </aside>
           <button
             id="viewer-info"
@@ -147,6 +166,7 @@
           <div id="fs-stage" class="fv-fs-stage">
             <img id="fs-image" class="fv-fs-image" alt="" draggable="false" hidden />
           </div>
+          <div id="fs-file-name" class="fv-fs-name" hidden></div>
           <button id="fs-close" class="fv-fs-close" type="button" title="关闭（Esc）" aria-label="关闭全屏">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12" /></svg>
           </button>
@@ -176,10 +196,19 @@
             </header>
             <dl class="fv-fs-detail-list">
               <div><dt>文件名</dt><dd id="fs-name"></dd></div>
+              <div><dt>格式</dt><dd id="fs-format"></dd></div>
               <div><dt>尺寸</dt><dd id="fs-dim"></dd></div>
+              <div><dt>总像素</dt><dd id="fs-pixels"></dd></div>
               <div><dt>大小</dt><dd id="fs-size"></dd></div>
               <div><dt>修改时间</dt><dd id="fs-time"></dd></div>
             </dl>
+            <div id="fs-exif" class="fv-fs-detail-list fv-fs-detail-extra" hidden></div>
+          </aside>
+          <aside id="fs-mini" class="fv-mini fv-fs-mini" hidden>
+            <div id="fs-mini-body" class="fv-mini-body"></div>
+            <button id="fs-mini-close" class="fv-mini-close" type="button" title="关闭" aria-label="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
           </aside>
           <button id="fs-info" class="fv-fs-info" type="button" title="显示详细信息（I）" aria-label="显示详细信息">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>

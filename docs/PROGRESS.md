@@ -378,3 +378,19 @@
 | F2 | 验收 ↔ 证据 ↔ 测试逐条对齐：M5.3（安装包 18 条独立 ProgID + `icon` 释放到 `resources\<ext>.ico` + `DefaultIcon` 路径；`npm run icons` 产物齐全）；M5.4（面板芯片图标路径、`DefaultIcon` 写入断言、图标资源/清单/卸载脚本一致性 3 项）。全量 33 files / 294 passed。2026-11-07 |
 | F3 | 代码结构 ↔ spec 详细设计：`scripts/file-icons.ts`、`shared/associations.ts`（分类色/ProgID/文件名）、`main/associations.ts`（`iconsDir` + `iconRef`）、`electron-builder.yml`、`installer.nsh`、`shell` 芯片渲染与 `build.ts` 资源复制——与 spec §3.4/M5.3/M5.4 一致，无未回填偏差。2026-11-07 |
 | 收尾复验 | `npm test` → `Test Files 33 passed (33) / Tests 294 passed (294)`；`npm run typecheck` → 无输出；`npm run build` → 通过；`electron-builder --win` 双产物重建完成（2026-11-07）。 |
+
+## 批次 14 ✅（已归档 · 需求变更）
+
+| 标签 | 内容 |
+|---|---|
+| 覆盖 | spec §2.3、§2.6、§2.7、M1.2、M1.3（改写）、M5.1 |
+| 依赖序 | M1.2 → M1.3 |
+| 档位 | 标准档（交互与布局调整，模块边界不变） |
+| 需求 | 图块大小调节改为列数增减（2–10 列，卡片按列数自适应）；文件名避免末行单字；卡片 hover/active 微量缩放；小字统一 10 号并内嵌苹方替代字体；详细信息改为 mini 面板；图墙右下角返回顶部；图片右键「在文件浏览器中打开」；EXIF 与视频帧率/帧数/流信息 |
+| RED | 反向验证：临时移除 `text-wrap: balance` 与 `word-break: break-all` → 长文件名 `ComfyUI_temp_jpqyz_00009_.png` 末行孤字 `g`（E2E 截图，2026-11-08） |
+| GREEN | `npm run typecheck` → 无输出；`npm test` → `Test Files 37 passed (37) / Tests 317 passed (317)`；`npm run build` → 通过；`electron-builder --win --publish never` → `release/FastViewer-0.1.0.exe` 与 `.zip`；静默安装至 `%LOCALAPPDATA%\Programs\FastViewer` 并启动验证（2026-11-08） |
+| 回写 | 配置字段 `tileSize` → `gridColumns`（默认 4、2–10 钳制，旧字段忽略）；`grid-math` 改为 `computeMetrics(width, columns, count)`，图块宽 `S = max(56, floor((W-32-8(C-1))/C))`，窄窗口实际列数按最小 56 px 收敛；`Grid.setTileSize` → `setColumns`，`tilePosition` 改取 `metrics.tileSize`；工具栏 −/滑杆/+/数值改为列数控件（`Ctrl+滚轮` 列数 ±1）；`.fv-name` 改 `word-break:break-all` + `text-wrap:balance` 消除孤字，内边距 6px/10px；卡片 hover `scale(1.025)`、active `scale(0.99)`；`--fs-12` 降至 10px 并内嵌 `NotoSansHans-Regular.otf`（`FastViewer Sans`）；查看器/全屏新增 mini 信息面板（图片：分辨率/格式/像素数/容量；视频：分辨率/视频流/音频流/帧率/时长，点击展开完整详情）；图墙右下角返回顶部按钮（>480 px 显示）；右键菜单新增 `fv:fs-reveal` → `shell.showItemInFolder`；新增 `binary/file-reader/exif/video-meta/detail-rows` 纯 JS Range 解析（JPEG/PNG/WebP EXIF、MP4/WebM 流信息），EXIF 长文本（Prompt JSON）过滤。影响：spec §2.3/§2.6/§2.7/M1.2/M1.3/M5.1 已同步。 |
+| 待定 | —（GIF/AVIF 无 EXIF；无容器音频暂无流信息） |
+| F2 | 验收 ↔ 证据 ↔ 测试逐条对齐：M1.3（列数 2–10 钳制、按列数计算图块尺寸、窄窗口收敛、锚点保持）；M5.1（`gridColumns` 持久化与越界钳制）；M1.2（文件名孤字消除、卡片动画）。全量 37 files / 317 passed。2026-11-08 |
+| F3 | 代码结构 ↔ spec 详细设计：`grid-math.ts`、`grid.ts`、`app.ts` 列数链路与 §2.3/M1.3 一致；`shared/config.ts`、`main/config.ts`、`reset.ts` 与 §2.6/M5.1 一致；`exif.ts`/`video-meta.ts`/`file-reader.ts` 与详情面板渲染链路一致。无未回填偏差。2026-11-08 |
+| 收尾复验 | `npm run typecheck` 无输出；`npm test` 37 files / 317 passed；`npm run build` 通过；安装包已重建并覆盖安装（2026-11-08）。 |

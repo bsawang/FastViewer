@@ -68,7 +68,10 @@ async function main(): Promise<void> {
   cpSync(join(root, 'src/web/app.css'), join(dist, 'web/assets/app.css'))
   cpSync(join(root, 'src/shared/tokens.css'), join(dist, 'shell/tokens.css'))
   cpSync(join(root, 'src/shared/tokens.css'), join(dist, 'web/assets/tokens.css'))
+  cpSync(join(root, 'src/web/assets/fonts'), join(dist, 'web/assets/fonts'), { recursive: true })
+  cpSync(join(root, 'src/web/assets/fonts'), join(dist, 'shell/assets/fonts'), { recursive: true })
   cpSync(join(root, 'build/icon.ico'), join(dist, 'shell/assets/icon.ico'))
+  cpSync(join(root, 'build/icon.png'), join(dist, 'shell/assets/icon.png'))
   mkdirSync(join(dist, 'shell/assets/file-icons'), { recursive: true })
   for (const ext of ASSOCIATION_EXTS) {
     cpSync(

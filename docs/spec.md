@@ -40,13 +40,14 @@
 
 ### 2.3 图块度量
 
-- 图块宽度 `S`（px），范围 **96–320**，默认 **180**，Ctrl+滚轮步进 **16**；卡片总高恒为 `S`，缩略图区域为 `S × S` 正方形，文件名以浮层压在图内底部。
+- 列数 `C`，范围 **2–10**，默认 **4**，Ctrl+滚轮步进 **1**；图块宽度 `S` 由列数与容器宽度自适应：`S = max(56, floor((W - 2×16 - 8×(C-1)) / C))`，卡片总高恒为 `S`，缩略图区域为 `S × S` 正方形，文件名以浮层压在图内底部。
 - 间距 `gap = 8`，容器内边距 `padding = 16`。
-- 列数：`cols = max(1, floor((W - 2×16 + 8) / (S + 8)))`
-- 文件名**不限行数、完整换行**：浮层宽 `S`（左右内边距各 6 px），字号 12 px、行高 16 px、上下内边距各 4 px；高度随行数向上生长（`maxLines × 16 + 8`），超出卡片顶部的部分被裁切，**不改变卡片尺寸**。
+- 窄窗口保护：实际列数 `cols = min(C, max(1, floor((W - 32 + 8) / (56 + 8))))`，保证图块不小于 56 px。
+- 文件名**不限行数、完整换行**：浮层宽 `S`（左右内边距各 10 px），字号 10 px、行高 14 px、上下内边距各 6 px；`word-break: break-all` + `text-wrap: balance` 避免出现末行单字符（孤字），高度随行数向上生长，超出卡片顶部的部分被裁切，**不改变卡片尺寸**。
 - 行高固定 `rowH = S + gap`，`rowTops[r] = 16 + r × rowH`，`totalH = 2×16 + rows × rowH`；可见区间与锚点按 `rowTops` 二分查找。
 - 缩略图 `object-fit: cover; object-position: center top`：铺满正方形区域、顶部居中，过高的图裁掉底部、过宽的图裁掉左右。文件名浮层绝对定位贴卡片底部（`left/right/bottom: 0`），背景 `rgba(0,0,0,.55)`，完整换行不省略；文件夹/盘符在正方形内居中显示图标，名称同样以浮层底部换行。
-- 排序键（名称/时间/大小 + 正倒序）与图块大小滑杆（`−` / 滑杆 / `+`）位于**面包屑下方**的控件行；图墙底部不再有工具条。
+- 排序键（名称/时间/大小 + 正倒序）与列数控件（`−` / 滑杆 / `+` / 数值）位于**面包屑下方**的控件行；图墙底部不再有工具条。
+- 卡片 hover 轻微放大 `scale(1.025)` 并抬升 `z-index`，按下回缩 `scale(0.99)`；过渡时长 `--t-hover`。
 - 当前查看项 `.is-current` 用 **5 px** 强调色描边 + 外发光标识；查看器切换后若当前图块不在可见范围，图墙滚动到 `rowTops[row] - 16`，使该行贴顶；已在可见范围内则不滚动。
 
 ### 2.4 缩放口径
@@ -74,7 +75,7 @@
   "version": 1,
   "lastFolder": null,
   "sort": { "key": "name", "order": "asc" },
-  "tileSize": 180,
+  "gridColumns": 4,
   "detailOpen": true,
   "splitRatio": 0.45,
   "theme": "midnight",
@@ -88,7 +89,7 @@
 | lastFolder | 绝对路径 / null | null | 非法路径 → null |
 | sort.key | `name` \| `mtime` \| `size` | `name` | 非法 → name |
 | sort.order | `asc` \| `desc` | `asc` | 非法 → asc |
-| tileSize | 96–320 整数 | 180 | 越界 → 钳制 |
+| gridColumns | 2–10 整数 | 4 | 越界 → 钳制 |
 | detailOpen | boolean | true | 非布尔 → true |
 | splitRatio | 0.2–0.8 小数 | 0.45 | 越界 → 钳制 |
 | theme | `midnight` \| `obsidian` \| `moss` \| `ember` \| `dawn` | `midnight` | 非法 → midnight |
@@ -100,7 +101,7 @@
 
 | 上下文 | 按键 | 动作 |
 |---|---|---|
-| 图墙 | Ctrl+滚轮 | 图块大小 ±16 |
+| 图墙 | Ctrl+滚轮 | 列数 ±1（向上减少列数、图块变大） |
 | 查看器（图片/视频） | ← / → | 上一项 / 下一项（循环） |
 | 查看器 | Esc | 全屏浮层打开→关闭浮层；否则无动作（查看器常驻，不关闭） |
 | 查看器 / 全屏浮层 | 滚轮 | 上一项 / 下一项（循环；累积 `|deltaY| ≥ 50` 触发，同一手势 200 ms 冷却） |
@@ -234,7 +235,7 @@ docs/            # prd / spec / PROGRESS
 - 应用图标：`build/icon.ico`（含 16/24/32/48/64/128/256 七尺寸）由 `docs/fvlogo.png` 直接生成——1024×1024 透明底 FV 渐变字形，原样存为 `build/icon.png` 作母图，**不加底板、不做圆角遮罩**，各尺寸由母图 LANCZOS 缩放；供 exe 资源、安装器/卸载器与 BrowserWindow 共用。`scripts/build.ts` 同时把它复制到 `dist/shell/assets/icon.ico`，`src/main/window.ts` 用它作 BrowserWindow 图标，保证开发期窗口与任务栏即显正式图标。
 - 文件类型图标：`scripts/file-icons.ts` 按统一模板生成 `build/file-icons/<ext>.svg` 与 `<ext>.ico`（16/20/24/32/40/48/64/96/128/256 多尺寸）：40×40 文件页外形 + 折角高光 + 底部白色大写扩展名，位图 `#7F56D9`、矢量图 `#12B76A`、视频 `#F04438`。SVG 供设置面板芯片（复制到 `dist/shell/assets/file-icons/`），ICO 由 `win.fileAssociations` 的 `icon` 在安装时释放到 `resources\<ext>.ico`，作为各 ProgID 的 `DefaultIcon`。
 - 文件关联：NSIS 安装包按 `win.fileAssociations` 为每个扩展名注册独立 ProgID（`HKCU\Software\Classes\.<ext>` → `FastViewer.<ext>`，`shell\open\command` = `"<install>\FastViewer.exe" "%1"`，`DefaultIcon` = `"<install>\resources\<ext>.ico"`）；安装器 `oneClick`、`perMachine: false`、`runAfterFinish: false`；卸载删除 ProgID 与 OpenWithProgids（`APP_UNASSOCIATE`）。electron-builder 卸载不会清扩展名默认值，`build/installer.nsh` 的 `customUnInstall` 逐扩展比对：只有当前值仍等于我们的 ProgID 才删除，避免覆盖用户后来改选的默认程序。**不写 `UserChoice`**：Windows 10 已设默认的扩展（如本机 jpg/png→照片、mp4→PotPlayer）仍由用户首次“始终使用”或在系统默认应用里确认。
-- 运行期开关：`app.commandLine.appendSwitch('enable-features','OverlayScrollbar')`（细滚动条）；`app.commandLine.appendSwitch('autoplay-policy','document-user-activation-required')`（避免切到视频自动出声）。
+- 运行期开关：`app.commandLine.appendSwitch('enable-features','OverlayScrollbar')`（细滚动条）；`app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required')`（视频查看器默认自动播放）。
 - 调试：仅当环境变量 `FV_DEBUG_PORT` 存在时追加 `remote-debugging-port`；否则不暴露调试端口。
 
 ### 3.5 约定
@@ -271,7 +272,7 @@ docs/            # prd / spec / PROGRESS
 | M4.3 | M4 | 进程隔离与本地服务安全 | ✅ |
 | M1.1 | M1 | 目录索引与分页接口 | ✅ |
 | M1.2 | M1 | 图墙虚拟化与无限滚动 | ✅ |
-| M1.3 | M1 | 图块大小调节 | ✅ |
+| M1.3 | M1 | 列数与图块自适应 | ✅ |
 | M1.4 | M1 | 面包屑与目录导航 | ✅ |
 | M1.5 | M1 | 打开与切换文件夹 | ✅ |
 | M1.6 | M1 | 盘符列表（此电脑） | ✅ |
@@ -398,7 +399,7 @@ flowchart TD
 模块概要：
 
 - 职责：把磁盘目录变成可分页消费的媒体条目流，并渲染为可无限滚动的虚拟图墙
-- 输入：目录路径（含虚拟根“此电脑”）、排序键、图块大小
+- 输入：目录路径（含虚拟根“此电脑”）、排序键、列数
 - 输出：图墙 DOM、盘符列表、当前目录上下文（路径/父目录/媒体序列）
 - 依赖：M4
 - 被谁依赖：M2、M3、M5
@@ -433,31 +434,31 @@ GET /api/dir?path=<abs>&sort=name|mtime|size&order=asc|desc&offset=0&limit=500
 
 #### M1.2 图墙虚拟化与无限滚动 ✅
 
-- **验收**：用 2000 项夹具目录，滚动到底后页面已加载条目数 = `total`，且 CDP 断言 `document.querySelectorAll('.fv-tile').length < 300`；滚动过程中连续截图无整行空白；快速拖滚动条不出现错位图块；缩略图铺满正方形区域（`object-fit:cover`，宽高比不符时裁切而不是留黑边）；**文件名不限行数完整换行**，以半透明底衬压在图块底部、向上生长，图块尺寸固定（不随文件名行数变化）；超长文件名（如 80 字符）无省略号、无截断；排序键与图块大小控制在面包屑下方，图墙底部无工具条；查看器切图（←/→、滚轮、全屏浮层、点击图块）后当前图块高亮同步，**当前图块不在可见范围时图墙自动滚动使其所在行贴顶**，已在可见范围内不改变滚动位置；当前图块描边宽 5 px；文件夹图块使用自绘**填充式**文件夹图标（非 Heroicons、无描边），与控件线性图标区分。
+- **验收**：用 2000 项夹具目录，滚动到底后页面已加载条目数 = `total`，且 CDP 断言 `document.querySelectorAll('.fv-tile').length < 300`；滚动过程中连续截图无整行空白；快速拖滚动条不出现错位图块；缩略图铺满正方形区域（`object-fit:cover`，宽高比不符时裁切而不是留黑边）；**文件名不限行数完整换行**，以半透明底衬压在图块底部、向上生长，图块尺寸固定（不随文件名行数变化）；超长文件名（如 80 字符）无省略号、无截断；排序键与列数控制在面包屑下方，图墙底部无工具条；查看器切图（←/→、滚轮、全屏浮层、点击图块）后当前图块高亮同步，**当前图块不在可见范围时图墙自动滚动使其所在行贴顶**，已在可见范围内不改变滚动位置；当前图块描边宽 5 px；文件夹图块使用自绘**填充式**文件夹图标（非 Heroicons、无描边），与控件线性图标区分。
 - **依赖**：M1.1
 
 详细设计：
 
-- 数据流：`state{items, loaded, total, scrollTop, size, cols, rowTops}` → `scroll`/`resize` 触发 rAF 调度 → 二分查找可见行 `[firstRow-2, lastRow+2]` → 复用/创建 tile 节点 → 当 `lastRow > loadedRows - 3` 且有更多 → `GET /api/dir?offset=loaded` 追加。
-- 接口：`Grid.mount(el, {onOpen, onLoadMore})`、`Grid.setEntries(entries, total, reset)`、`Grid.setTileSize(px)`、`Grid.refreshLayout()`、`Grid.setCurrent(index)`（查看器当前项 → 图墙高亮，必要时联动滚动）。
-- 数据结构：`GridItem`（来自 §2.2 条目）；节点池 `Map<number, HTMLElement>`；已加载条目数组；`rowLayout {rowHeights:number[], rowTops:number[], totalH:number}`（行高恒为 `S + 8`）。
-- 算法与规则：cols/行高/总高见 §2.3；行高固定为 `S + 8`（卡片高 `S`），不依赖文件名行数；每次 `setEntries/setTileSize/resize` 直接按固定行高重算 `rowTops` 前缀和，不做文本测量。定位层 `position:absolute; transform:translate3d(0,0,0)`，tile 用 `left/rowTops[row]` 绝对定位，高度恒为 `S`；`overscan=2` 行；滚动监听 `{passive:true}` + rAF 合并；tile 内 `<img decoding="async">`，**禁用 `loading="lazy"`**；离开视口的 tile 复用节点并清空 `src` 前先换 URL。媒体图块结构为单张 `S×S` 图（文件夹/盘符图标同样居中于正方形）；文件夹图标为**自绘填充式**路径（`fill: currentColor`、`stroke: none`，尺寸约 42% 图块宽、上限 96 px），不使用 Heroicons。文件名绝对定位压在图内底部、背景 `rgba(0,0,0,.55)`、`white-space:normal; overflow-wrap:anywhere`，**不限行数、向上生长、可覆盖图片，但不改变图块尺寸**。当前查看项加 `.is-current` 高亮（5 px 强调色描边 + 外发光）；`setCurrent` 在目标行与可见区间无交集（`rowTops[row] + rowH <= scrollTop` 或 `rowTops[row] >= scrollTop + clientHeight`）时把 `scrollTop` 设为 `rowTops[row] - GRID_PADDING` 并立即重绘，部分可见或完全可见时都不动。排序键与正倒序切换位于面包屑下方控件行，变更后按新排序重新请求第 0 页并重建查看器序列；排序持久化见 M5.1。
+- 数据流：`state{items, loaded, total, scrollTop, columns, cols, rowTops}` → `scroll`/`resize` 触发 rAF 调度 → 二分查找可见行 `[firstRow-2, lastRow+2]` → 复用/创建 tile 节点 → 当 `lastRow > loadedRows - 3` 且有更多 → `GET /api/dir?offset=loaded` 追加。
+- 接口：`Grid.mount(el, {onOpen, onLoadMore})`、`Grid.setEntries(entries, total, reset)`、`Grid.setColumns(count)`、`Grid.getColumns()`、`Grid.refreshLayout()`、`Grid.setCurrent(index)`（查看器当前项 → 图墙高亮，必要时联动滚动）。
+- 数据结构：`GridItem`（来自 §2.2 条目）；节点池 `Map<number, HTMLElement>`；已加载条目数组；`rowLayout {rowHeights:number[], rowTops:number[], totalH:number, tileSize:number}`（行高恒为 `S + 8`）。
+- 算法与规则：cols/图块尺寸/行高/总高见 §2.3；行高固定为 `S + 8`（卡片高 `S`），不依赖文件名行数；每次 `setEntries/setColumns/resize` 直接按固定行高重算 `rowTops` 前缀和，不做文本测量。定位层 `position:absolute; transform:translate3d(0,0,0)`，tile 用 `left/rowTops[row]` 绝对定位，高度恒为 `S`；`overscan=2` 行；滚动监听 `{passive:true}` + rAF 合并；tile 内 `<img decoding="async">`，**禁用 `loading="lazy"`**；离开视口的 tile 复用节点并清空 `src` 前先换 URL。媒体图块结构为单张 `S×S` 图（文件夹/盘符图标同样居中于正方形）；文件夹图标为**自绘填充式**路径（`fill: currentColor`、`stroke: none`，尺寸约 42% 图块宽、上限 96 px），不使用 Heroicons。文件名绝对定位压在图内底部、背景 `rgba(0,0,0,.55)`、`white-space:normal; word-break:break-all; text-wrap:balance`，**不限行数、向上生长、可覆盖图片，但不改变图块尺寸，并避免末行出现单字符**。当前查看项加 `.is-current` 高亮（5 px 强调色描边 + 外发光）；`setCurrent` 在目标行与可见区间无交集（`rowTops[row] + rowH <= scrollTop` 或 `rowTops[row] >= scrollTop + clientHeight`）时把 `scrollTop` 设为 `rowTops[row] - GRID_PADDING` 并立即重绘，部分可见或完全可见时都不动。排序键与正倒序切换位于面包屑下方控件行，变更后按新排序重新请求第 0 页并重建查看器序列；排序持久化见 M5.1。
 - 错误与边界：容器宽 0（初始化/隐藏）→ 用 `ResizeObserver` 延后布局；窗口缩放/分屏宽度变化 → 重算 cols/行高并保持“首个可见条目索引”不变；图片请求失败 → tile 显示占位图标 + 文件名；分页请求失败 → 图墙底部显示“加载失败，点击重试”（非工具条），不自动狂刷；快速滚动 → 只保留最新一次 layout，丢弃过期 rAF；不依赖文本测量，滚动与重排无折行计算开销。
 - 测试要点：`tests/grid-math.test.ts`（cols、固定行高、可见区间、锚点换算、边界 1 行/0 项）；E2E DOM 数量与加载数断言。
 
-#### M1.3 图块大小调节 ✅
+#### M1.3 列数与图块自适应 ✅
 
-- **验收**：在图墙上 Ctrl+滚轮一格 → `tileSize` 180→196，列数随之变化；300 ms 内配置文件 `tileSize` 更新；重启后保持；连续放大到上限停在 320、缩小到 96；**面包屑下方**控件行的 −/+ 与滑杆效果一致；调整后列数与行高按新 `S` 重算，文件名浮层不限行数、完整显示且不改变卡片尺寸。
+- **验收**：在图墙上 Ctrl+滚轮一格 → 列数 ±1（向上减少列数、图块变大），范围钳制在 2–10；300 ms 内配置文件 `gridColumns` 更新；重启后保持；**面包屑下方**控件行的 −/+、滑杆与数值一致；调整后图块宽度按 `(可用宽 - 间距) / 列数` 自适应，行高随之重算，文件名浮层不限行数、完整显示且不改变卡片尺寸；窗口过窄时实际列数自动收敛且图块不小于 56 px。
 - **依赖**：M1.2
 
 详细设计：
 
-- 数据流：`wheel(ctrlKey)` → `preventDefault` → `next = clamp(size ± 16, 96, 320)` → `Grid.setTileSize` → 记录锚点条目索引 → 重排 → `patchConfig({tileSize})`。
-- 接口：`Grid.setTileSize(px)`；`fvHost.patchConfig({tileSize})`；面包屑下方控件行 `− / 滑杆 / +`。
-- 数据结构：`tileSize:number`（§2.6）。
-- 算法与规则：重排后按新 `rowTops` 计算锚点行顶部并加回原容器内偏移，保证锚点条目留在视口同一位置；滑杆 `min=96 max=320 step=4`（`step=16` 会按 `min+16k` 吸附，默认 180 被钳成 176，与“180→196”及 −/+ 一致性验收冲突；`step=4` 使 96/180/320 与全部 ±16 结果均可表示，滚轮与 −/+ 仍固定 ±16）。
-- 错误与边界：非 Ctrl 滚轮不拦截（正常滚动）；触控板捏合会产生 `ctrlKey=true` 的 wheel，同样处理；尺寸不变时跳过重排。
-- 测试要点：`tests/grid-math.test.ts` 锚点换算；E2E 滚轮事件断言。
+- 数据流：`wheel(ctrlKey)` 或 −/+ / 滑杆 → `applyColumns(clamp(C ± 1, 2, 10))` → `Grid.setColumns` → 记录锚点条目索引 → 重排 → `patchConfig({gridColumns})`。
+- 接口：`Grid.setColumns(count)` / `Grid.getColumns()`；`fvHost.patchConfig({gridColumns})`；面包屑下方控件行 `− / 滑杆 / + / 数值`。
+- 数据结构：`gridColumns:number`（§2.6）；`GridMetrics.tileSize` 由图块宽度反推得出。
+- 算法与规则：`computeMetrics(width, columns, count)` 先按最小图块 56 px 收敛实际列数，再以 `S = floor((W - 32 - 8×(cols-1)) / cols)` 求图块尺寸；重排后按新 `rowTops` 计算锚点行顶部并加回原容器内偏移，保证锚点条目留在视口同一位置；滑杆 `min=2 max=10 step=1`；按钮到达边界时禁用。
+- 错误与边界：非 Ctrl 滚轮不拦截（正常滚动）；触控板捏合会产生 `ctrlKey=true` 的 wheel，同样处理；列数不变时跳过重排；旧配置中的 `tileSize` 被忽略，回落默认 4 列。
+- 测试要点：`tests/grid-math.test.ts`（按列数计算图块尺寸、窄窗口钳制、锚点换算）；`tests/config.test.ts`（2–10 钳制与持久化）；E2E 滚轮事件断言。
 
 #### M1.4 面包屑与目录导航✅
 
@@ -646,14 +647,14 @@ GET /api/drives
 模块概要：
 
 - 职责：持久化配置，启动时恢复会话，提供设置/关于面板与文件关联开关
-- 输入：用户操作（目录/排序/图块大小/详情浮窗）、窗口状态
+- 输入：用户操作（目录/排序/列数/详情浮窗）、窗口状态
 - 输出：配置文件、恢复后的 UI 状态、设置面板
 - 依赖：M4、M1
 - 被谁依赖：无
 
 #### M5.1 配置存储与会话恢复✅
 
-- **验收**：改图块大小/排序/目录/分屏比例/皮肤后 300 ms 内配置文件出现对应字段；结束进程再启动 → 目录、排序、图块大小、分屏比例、皮肤、窗口位置大小与最大化状态全部恢复；手工把配置改成坏 JSON → 应用正常启动且回默认值；`tileSize: 9999` → 启动后为 320；`splitRatio: 2` → 启动后为 0.8；`theme: "unknown"` → 启动后为 `midnight`；把窗口移到副屏再关闭、断开副屏后启动 → 窗口出现在主屏可见区域。
+- **验收**：改列数/排序/目录/分屏比例/皮肤后 300 ms 内配置文件出现对应字段；结束进程再启动 → 目录、排序、列数、分屏比例、皮肤、窗口位置大小与最大化状态全部恢复；手工把配置改成坏 JSON → 应用正常启动且回默认值；`gridColumns: 99` → 启动后为 10；`splitRatio: 2` → 启动后为 0.8；`theme: "unknown"` → 启动后为 `midnight`；把窗口移到副屏再关闭、断开副屏后启动 → 窗口出现在主屏可见区域。
 - **依赖**：M4.1、M1.5
 
 详细设计：
@@ -667,14 +668,14 @@ GET /api/drives
 
 #### M5.2 设置与关于面板 ✅
 
-- **验收**：点标题栏齿轮 → 面板显示 FastViewer `0.1.0`、Electron `44.0.0`、Chromium `152.0.7977.54`（与 `process.versions` 一致）；点“打开配置目录”在资源管理器中打开 `<userData>`；点“恢复默认布局”后窗口居中、`tileSize=180`、详情浮窗恢复显示、分屏比例 0.45；“清理全部偏好”后 `lastFolder=null`，下次启动进入“此电脑”盘符列表。
+- **验收**：点标题栏齿轮 → 面板显示 FastViewer `0.1.0`、Electron `44.0.0`、Chromium `152.0.7977.54`（与 `process.versions` 一致）；点“打开配置目录”在资源管理器中打开 `<userData>`；点“恢复默认布局”后窗口居中、`gridColumns=4`、详情浮窗恢复显示、分屏比例 0.45；“清理全部偏好”后 `lastFolder=null`，下次启动进入“此电脑”盘符列表。
 - **依赖**：M5.1
 
 详细设计：
 
 - 数据流：壳页齿轮 → 浮层 → `fvShell.about()` → 渲染版本与路径；按钮 → IPC → 主进程执行。
 - 接口：`fvShell.about(): Promise<{app:string; electron:string; chromium:string; configPath:string}>`、`revealConfig()`、`resetLayout()`、`resetPrefs()`。
-- 数据结构：`AboutInfo`；重置范围：`resetLayout` 只重置 `window/tileSize/detailOpen/splitRatio`（`window` 由主进程按 `initialBounds` 回中触发常规位置落盘，重置补丁本身不含 window）；`resetPrefs` 重置全部（含 `lastFolder`）。
+- 数据结构：`AboutInfo`；重置范围：`resetLayout` 只重置 `window/gridColumns/detailOpen/splitRatio`（`window` 由主进程按 `initialBounds` 回中触发常规位置落盘，重置补丁本身不含 window）；`resetPrefs` 重置全部（含 `lastFolder`）。
 - 算法与规则：版本取 `app.getVersion()` + `process.versions.electron/chrome`；`shell.openPath(userData)`；重置后立即广播窗口状态；面板关闭：点遮罩 / Esc。
 - 错误与边界：打开目录失败 → 面板内 toast；重置时窗口最小尺寸保持 720×480；重置后当前图墙不强制跳转（`resetLayout` 不动当前目录）。
 - 测试要点：`tests/about.test.ts`（字段映射）；E2E 手工。
@@ -744,7 +745,7 @@ GET /api/drives
 8. **不做移动端 / 触屏手势**。
 9. **不做网络目录（UNC/SMB）与网盘**。
 10. **不做图片编辑、格式转换、批量重命名**。
-11. **不恢复图墙滚动位置**——只恢复目录、排序、图块大小与窗口状态。
+11. **不恢复图墙滚动位置**——只恢复目录、排序、列数与窗口状态。
 
 ## 6. 待定项
 

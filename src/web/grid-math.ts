@@ -1,8 +1,8 @@
+import { GRID_COLUMNS_MAX, GRID_COLUMNS_MIN } from '../shared/config'
+
 export const GRID_PADDING = 16
 export const GRID_GAP = 8
-export const TILE_MIN = 96
-export const TILE_MAX = 320
-export const TILE_STEP = 16
+const TILE_MIN = 56
 
 export interface GridMetrics {
   cols: number
@@ -10,10 +10,18 @@ export interface GridMetrics {
   rowHeights: number[]
   rowTops: number[]
   totalH: number
+  tileSize: number
 }
 
-export function computeMetrics(width: number, tileSize: number, count: number): GridMetrics {
-  const cols = Math.max(1, Math.floor((width - GRID_PADDING * 2 + GRID_GAP) / (tileSize + GRID_GAP)))
+export function clampColumns(value: number): number {
+  return Math.min(GRID_COLUMNS_MAX, Math.max(GRID_COLUMNS_MIN, Math.round(value)))
+}
+
+export function computeMetrics(width: number, columns: number, count: number): GridMetrics {
+  const available = Math.max(0, width - GRID_PADDING * 2)
+  const limit = Math.max(1, Math.floor((available + GRID_GAP) / (TILE_MIN + GRID_GAP)))
+  const cols = Math.max(1, Math.min(clampColumns(columns), limit))
+  const tileSize = Math.max(TILE_MIN, Math.floor((available - GRID_GAP * (cols - 1)) / cols))
   const rows = count > 0 ? Math.ceil(count / cols) : 0
   const height = tileSize + GRID_GAP
   const rowHeights: number[] = []
@@ -24,7 +32,14 @@ export function computeMetrics(width: number, tileSize: number, count: number): 
     rowHeights.push(height)
   }
 
-  return { cols, rows, rowHeights, rowTops, totalH: GRID_PADDING + rows * height + GRID_PADDING }
+  return {
+    cols,
+    rows,
+    rowHeights,
+    rowTops,
+    totalH: GRID_PADDING + rows * height + GRID_PADDING,
+    tileSize,
+  }
 }
 
 export function rowIndexAt(rowTops: number[], y: number): number {
@@ -48,13 +63,12 @@ export function tilePosition(
   index: number,
   cols: number,
   metrics: GridMetrics,
-  tileSize: number,
 ): { left: number; top: number } {
   if (cols <= 0) return { left: GRID_PADDING, top: GRID_PADDING }
   const row = Math.floor(index / cols)
   const col = index % cols
   return {
-    left: GRID_PADDING + col * (tileSize + GRID_GAP),
+    left: GRID_PADDING + col * (metrics.tileSize + GRID_GAP),
     top: metrics.rowTops[row] ?? GRID_PADDING,
   }
 }
@@ -100,8 +114,4 @@ export function focusScrollTop(
   const visible = bottom > scrollTop && top < scrollTop + viewportH
   if (visible) return null
   return Math.max(0, top - GRID_PADDING)
-}
-
-export function clampTileSize(value: number): number {
-  return Math.min(TILE_MAX, Math.max(TILE_MIN, Math.round(value)))
 }

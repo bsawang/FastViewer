@@ -1,5 +1,9 @@
 import type { MediaItem } from './media-seq'
 import { wrapIndex } from './media-seq'
+import { renderDetailRows } from './detail-rows'
+import { extractExif, exifRows } from './exif'
+import { HttpRangeReader } from './file-reader'
+import { extensionLabel, formatPixels } from './media-info'
 import { formatBytes } from './viewer'
 import { WheelNavigator } from './wheel-nav'
 import { Zoom, type ZoomState } from './zoom'
@@ -8,6 +12,7 @@ interface FullscreenElements {
   modal: HTMLElement
   stage: HTMLElement
   image: HTMLImageElement
+  fileName: HTMLElement
   close: HTMLButtonElement
   prev: HTMLButtonElement
   next: HTMLButtonElement
@@ -16,9 +21,15 @@ interface FullscreenElements {
   detail: HTMLElement
   detailClose: HTMLButtonElement
   detailName: HTMLElement
+  detailFormat: HTMLElement
   detailDim: HTMLElement
+  detailPixels: HTMLElement
+  detailExif: HTMLElement
   detailSize: HTMLElement
   detailTime: HTMLElement
+  mini: HTMLElement
+  miniBody: HTMLElement
+  miniClose: HTMLButtonElement
   info: HTMLButtonElement
   counter: HTMLElement
 }
@@ -47,7 +58,10 @@ export class FullscreenLayer {
   private readonly wheelNav = new WheelNavigator()
   private items: MediaItem[] = []
   private index = 0
+  private metaToken = 0
   private detailOpen = true
+  private miniOpen = false
+  private miniData: { dim?: string; pixels?: string } = {}
   private imageReady = false
   private pendingZoom: { x: number; y: number; factor: number } | null = null
   private pan: { startX: number; startY: number; lastX: number; lastY: number; active: boolean } | null =
@@ -63,7 +77,12 @@ export class FullscreenLayer {
     this.el.zoomFit.addEventListener('click', () => this.zoomFitNow())
     this.el.zoomActual.addEventListener('click', () => this.zoomActualNow())
     this.el.detailClose.addEventListener('click', () => this.setDetailOpen(false))
-    this.el.info.addEventListener('click', () => this.setDetailOpen(true))
+    this.el.info.addEventListener('click', () => this.toggleMini())
+    this.el.mini.addEventListener('click', () => this.expandDetail())
+    this.el.miniClose.addEventListener('click', (event) => {
+      event.stopPropagation()
+      this.applyPanels(false, false)
+    })
     this.bindStage()
     this.resizeObserver = new ResizeObserver(() => {
       if (this.isOpen() && this.imageReady && this.zoom.isFit()) this.applyZoom(this.zoom.fit())
@@ -79,7 +98,7 @@ export class FullscreenLayer {
     this.el.modal.hidden = false
     this.el.modal.classList.remove('fv-fs-stage--grabbing')
     this.wheelNav.reset()
-    this.setDetailOpen(detailOpen)
+    this.applyPanels(false, detailOpen)
     this.render()
   }
 
@@ -89,11 +108,13 @@ export class FullscreenLayer {
     this.pendingZoom = null
     this.imageReady = false
     this.items = []
+    this.metaToken += 1
     this.el.modal.hidden = true
     this.el.modal.classList.remove('fv-fs-stage--grabbing')
     this.wheelNav.reset()
     this.el.image.removeAttribute('src')
     this.el.image.hidden = true
+    this.el.fileName.hidden = true
     this.options.onClose()
   }
 
@@ -111,13 +132,46 @@ export class FullscreenLayer {
 
   toggleDetail(): void {
     if (!this.isOpen()) return
-    this.setDetailOpen(!this.detailOpen)
+    this.applyPanels(!this.detailOpen, false)
   }
 
   setDetailOpen(open: boolean): void {
-    this.detailOpen = open
-    this.el.detail.hidden = !open
-    this.el.info.hidden = open
+    this.applyPanels(open, false)
+  }
+
+  private toggleMini(): void {
+    if (!this.isOpen()) return
+    this.applyPanels(false, !this.miniOpen)
+  }
+
+  private expandDetail(): void {
+    if (!this.isOpen()) return
+    this.applyPanels(true, false)
+  }
+
+  private applyPanels(full: boolean, mini: boolean): void {
+    this.detailOpen = full
+    this.miniOpen = mini
+    this.el.detail.hidden = !full
+    this.el.mini.hidden = !mini
+    this.el.info.hidden = full || mini
+  }
+
+  private refreshMini(): void {
+    const item = this.items[this.index]
+    if (!item) return
+    const lines = [
+      this.miniData.dim ?? '读取中…',
+      `${extensionLabel(item.name)} · ${this.miniData.pixels ?? '读取中…'} · ${formatBytes(item.size)}`,
+    ]
+    this.el.miniBody.replaceChildren(
+      ...lines.map((line) => {
+        const row = document.createElement('div')
+        row.className = 'fv-mini-line'
+        row.textContent = line
+        return row
+      }),
+    )
   }
 
   zoomIn(): void {
@@ -162,18 +216,34 @@ export class FullscreenLayer {
     const item = this.items[this.index]
     if (!item) return
     const keepActual = this.zoom.getState().mode === 'actual'
+    const keepPrevious = this.imageReady && !this.el.image.hidden
     this.imageReady = false
     this.pendingZoom = null
     this.pan = null
-    this.el.image.hidden = true
+    if (!keepPrevious) this.el.image.hidden = true
+    this.el.fileName.textContent = item.name
+    this.el.fileName.hidden = false
     this.el.detailName.textContent = item.name
+    this.el.detailFormat.textContent = extensionLabel(item.name)
     this.el.detailDim.textContent = '读取中…'
+    this.el.detailPixels.textContent = '读取中…'
     this.el.detailSize.textContent = formatBytes(item.size)
     this.el.detailTime.textContent = new Date(item.mtimeMs).toLocaleString('zh-CN')
+    this.miniData = {}
+    this.refreshMini()
+    renderDetailRows(this.el.detailExif, [])
+    void this.loadExif(item, ++this.metaToken)
     this.updateCounter()
     this.el.image.onload = () => {
       this.imageReady = true
       this.el.detailDim.textContent = `${this.el.image.naturalWidth} × ${this.el.image.naturalHeight}`
+      this.el.detailPixels.textContent = formatPixels(
+        this.el.image.naturalWidth,
+        this.el.image.naturalHeight,
+      )
+      this.miniData.dim = `${this.el.image.naturalWidth} × ${this.el.image.naturalHeight}`
+      this.miniData.pixels = formatPixels(this.el.image.naturalWidth, this.el.image.naturalHeight)
+      this.refreshMini()
       this.el.image.hidden = false
       this.applyZoom(keepActual ? this.zoom.actual() : this.zoom.fit())
       if (this.pendingZoom) {
@@ -185,9 +255,22 @@ export class FullscreenLayer {
     this.el.image.onerror = () => {
       this.imageReady = false
       this.el.image.hidden = true
+      this.miniData.dim = '—'
+      this.miniData.pixels = '—'
+      this.refreshMini()
     }
     this.el.image.src = item.url
     if (this.el.image.complete && this.el.image.naturalWidth > 0) this.el.image.onload?.(new Event('load'))
+  }
+
+  private async loadExif(item: MediaItem, token: number): Promise<void> {
+    try {
+      const exif = await extractExif(new HttpRangeReader(item.path, item.size))
+      if (token !== this.metaToken || !exif) return
+      renderDetailRows(this.el.detailExif, exifRows(exif), 'EXIF 信息')
+    } catch {
+      // 元数据解析失败不影响预览
+    }
   }
 
   private bindStage(): void {

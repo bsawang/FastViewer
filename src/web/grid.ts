@@ -2,7 +2,7 @@ import {
   GRID_GAP,
   GRID_PADDING,
   anchorScrollTop,
-  clampTileSize,
+  clampColumns,
   computeMetrics,
   focusScrollTop,
   rowIndexAt,
@@ -22,7 +22,11 @@ export interface GridItem {
 
 export interface GridOptions {
   onOpen(index: number): void
+  onDoubleClick?(index: number): void
+  onContextMenu?(index: number, x: number, y: number): void
+  onBlankContextMenu?(x: number, y: number): void
   onLoadMore?(): void
+  getThumbnail?(item: GridItem, signal: AbortSignal): Promise<string | null>
 }
 
 const OVERSCAN_ROWS = 2
@@ -38,10 +42,11 @@ export class Grid {
   private options: GridOptions = { onOpen: () => {} }
   private readonly tiles = new Map<number, HTMLElement>()
   private readonly pool: HTMLElement[] = []
+  private readonly thumbAborts = new Map<HTMLElement, AbortController>()
   private items: GridItem[] = []
   private total = 0
-  private tileSize = 180
-  private metrics: GridMetrics = computeMetrics(0, this.tileSize, 0)
+  private columns = 4
+  private metrics: GridMetrics = computeMetrics(0, this.columns, 0)
   private currentIndex = -1
   private frame = 0
   private observer: ResizeObserver | null = null
@@ -54,6 +59,12 @@ export class Grid {
     el.append(this.layer)
 
     el.addEventListener('scroll', this.onScroll, { passive: true })
+    el.addEventListener('contextmenu', (event) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('.fv-tile')) return
+      event.preventDefault()
+      this.options.onBlankContextMenu?.(event.clientX, event.clientY)
+    })
     this.observer = new ResizeObserver(() => {
       if (!this.el || this.el.clientWidth === 0) return
       this.refreshLayout(true)
@@ -74,11 +85,11 @@ export class Grid {
     this.refreshLayout(false)
   }
 
-  setTileSize(size: number): void {
-    const next = clampTileSize(size)
-    if (next === this.tileSize) return
+  setColumns(columns: number): void {
+    const next = clampColumns(columns)
+    if (next === this.columns) return
     const anchor = this.captureAnchor()
-    this.tileSize = next
+    this.columns = next
     this.refreshLayout(false)
     if (anchor && this.el) {
       this.el.scrollTop = anchorScrollTop(anchor.index, anchor.offset, this.metrics.cols, this.metrics)
@@ -86,8 +97,8 @@ export class Grid {
     }
   }
 
-  getTileSize(): number {
-    return this.tileSize
+  getColumns(): number {
+    return this.columns
   }
 
   setCurrent(index: number): void {
@@ -110,7 +121,7 @@ export class Grid {
     if (width === 0) return
 
     const anchor = preserveAnchor ? this.captureAnchor() : null
-    this.metrics = computeMetrics(width, this.tileSize, this.items.length)
+    this.metrics = computeMetrics(width, this.columns, this.items.length)
     this.layer.style.height = `${this.metrics.totalH}px`
 
     if (anchor) {
@@ -124,6 +135,8 @@ export class Grid {
     this.observer = null
     if (this.el) this.el.removeEventListener('scroll', this.onScroll)
     if (this.layer) this.layer.remove()
+    for (const controller of this.thumbAborts.values()) controller.abort()
+    this.thumbAborts.clear()
     this.tiles.clear()
     this.pool.length = 0
     this.el = null
@@ -160,12 +173,12 @@ export class Grid {
     for (const [index, node] of this.tiles) {
       if (index < range.start || index >= range.end) {
         this.tiles.delete(index)
+        this.cancelThumb(node)
         node.remove()
         this.pool.push(node)
       }
     }
 
-    const size = this.tileSize
     for (let index = range.start; index < range.end; index += 1) {
       const item = this.items[index]
       if (!item) continue
@@ -175,7 +188,7 @@ export class Grid {
         this.tiles.set(index, node)
         this.layer.append(node)
       }
-      this.updateTile(node, item, index, size)
+      this.updateTile(node, item, index)
     }
 
     const loadedRows = Math.ceil(this.items.length / this.metrics.cols)
@@ -214,20 +227,37 @@ export class Grid {
       }
     })
 
+    const mark = document.createElement('div')
+    mark.className = 'fv-video-mark'
+    mark.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>'
+
     const name = document.createElement('span')
     name.className = 'fv-name'
 
-    media.append(folder, img)
+    media.append(folder, img, mark)
     node.append(media, name)
     node.addEventListener('click', () => {
       const index = Number(node.dataset.index)
       if (Number.isInteger(index)) this.options.onOpen(index)
     })
+    node.addEventListener('dblclick', () => {
+      const index = Number(node.dataset.index)
+      if (Number.isInteger(index)) this.options.onDoubleClick?.(index)
+    })
+    node.addEventListener('contextmenu', (event) => {
+      event.preventDefault()
+      const index = Number(node.dataset.index)
+      if (Number.isInteger(index)) {
+        this.options.onContextMenu?.(index, event.clientX, event.clientY)
+      }
+    })
     return node
   }
 
-  private updateTile(node: HTMLElement, item: GridItem, index: number, size: number): void {
-    const { left, top } = tilePosition(index, this.metrics.cols, this.metrics, size)
+  private updateTile(node: HTMLElement, item: GridItem, index: number): void {
+    const size = this.metrics.tileSize
+    const { left, top } = tilePosition(index, this.metrics.cols, this.metrics)
     const row = Math.floor(index / this.metrics.cols)
     const height = (this.metrics.rowHeights[row] ?? size + GRID_GAP) - GRID_GAP
     node.dataset.index = String(index)
@@ -247,18 +277,51 @@ export class Grid {
     if (!img) return
 
     if (item.kind === 'dir') {
+      this.cancelThumb(node)
       img.removeAttribute('src')
       img.dataset.url = ''
       node.classList.remove('fv-tile--error', 'fv-tile--loaded')
       return
     }
 
-    const url = fileUrl(item.path)
-    const absolute = new URL(url, location.href).href
-    if (img.dataset.url !== absolute) {
-      node.classList.remove('fv-tile--error', 'fv-tile--loaded')
-      img.dataset.url = absolute
-      img.src = url
+    const key = `${item.kind}:${item.path}`
+    if (node.dataset.thumbKey === key) return
+    this.cancelThumb(node)
+    node.dataset.thumbKey = key
+    node.classList.remove('fv-tile--error', 'fv-tile--loaded')
+    img.removeAttribute('src')
+    img.dataset.url = ''
+
+    const provider = this.options.getThumbnail
+    if (!provider) {
+      this.setThumb(img, fileUrl(item.path))
+      return
     }
+
+    const controller = new AbortController()
+    this.thumbAborts.set(node, controller)
+    void provider(item, controller.signal).then((url) => {
+      if (controller.signal.aborted || node.dataset.thumbKey !== key) return
+      if (url) {
+        this.setThumb(img, url)
+        return
+      }
+      // 缩略图生成失败：图片回退原图，视频保留下方占位与播放标记。
+      if (item.kind === 'image') this.setThumb(img, fileUrl(item.path))
+    })
+  }
+
+  private setThumb(img: HTMLImageElement, url: string): void {
+    img.dataset.url = new URL(url, location.href).href
+    img.src = url
+  }
+
+  private cancelThumb(node: HTMLElement): void {
+    const controller = this.thumbAborts.get(node)
+    if (controller) {
+      controller.abort()
+      this.thumbAborts.delete(node)
+    }
+    node.dataset.thumbKey = ''
   }
 }

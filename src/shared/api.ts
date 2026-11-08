@@ -6,6 +6,8 @@ import type { WindowState } from './window-state'
 
 export type WindowAction = 'minimize' | 'toggle-maximize' | 'close'
 
+export type FsResult = { ok: true; path?: string } | { ok: false; message: string }
+
 export interface BootInfo {
   appUrl: string
   guestPreloadUrl: string
@@ -42,6 +44,12 @@ export interface HostApi {
   getStartupPath(): Promise<string | null>
   setFolderTitle(title: string): void
   setImmersive(on: boolean): void
+  copyEntry(path: string): Promise<FsResult>
+  pasteEntry(dirPath: string): Promise<FsResult>
+  renameEntry(path: string, name: string): Promise<FsResult>
+  trashEntry(path: string): Promise<FsResult>
+  revealEntry(path: string): Promise<FsResult>
+  createFolder(dirPath: string, name: string): Promise<FsResult>
   onOpenPath(cb: (path: string) => void): void
   onConfigReset(cb: (kind: ResetKind) => void): void
   onTheme(cb: (theme: ThemeName) => void): void

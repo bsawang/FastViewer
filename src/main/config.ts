@@ -2,8 +2,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import {
   CONFIG_DEFAULTS,
-  TILE_SIZE_MAX,
-  TILE_SIZE_MIN,
+  GRID_COLUMNS_MAX,
+  GRID_COLUMNS_MIN,
   type AppConfig,
   type ConfigPatch,
   type WindowPlacement,
@@ -24,9 +24,9 @@ function copy(config: AppConfig): AppConfig {
   }
 }
 
-function cleanTileSize(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return CONFIG_DEFAULTS.tileSize
-  return Math.min(TILE_SIZE_MAX, Math.max(TILE_SIZE_MIN, Math.round(value)))
+function cleanColumns(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return CONFIG_DEFAULTS.gridColumns
+  return Math.min(GRID_COLUMNS_MAX, Math.max(GRID_COLUMNS_MIN, Math.round(value)))
 }
 
 function cleanSplitRatio(value: unknown): number {
@@ -66,7 +66,7 @@ export function sanitizeConfig(raw: unknown): AppConfig {
     version: 1,
     lastFolder: cleanFolder(raw.lastFolder),
     sort: { key, order },
-    tileSize: cleanTileSize(raw.tileSize),
+    gridColumns: cleanColumns(raw.gridColumns),
     detailOpen: typeof raw.detailOpen === 'boolean' ? raw.detailOpen : true,
     splitRatio: cleanSplitRatio(raw.splitRatio),
     theme: isThemeName(raw.theme) ? raw.theme : DEFAULT_THEME,
@@ -97,7 +97,7 @@ export class ConfigStore {
       ...current,
       lastFolder: patch.lastFolder === undefined ? current.lastFolder : patch.lastFolder,
       sort: patch.sort ? { ...current.sort, ...patch.sort } : current.sort,
-      tileSize: patch.tileSize === undefined ? current.tileSize : patch.tileSize,
+      gridColumns: patch.gridColumns === undefined ? current.gridColumns : patch.gridColumns,
       detailOpen: patch.detailOpen === undefined ? current.detailOpen : patch.detailOpen,
       splitRatio: patch.splitRatio === undefined ? current.splitRatio : patch.splitRatio,
       theme: patch.theme === undefined ? current.theme : patch.theme,

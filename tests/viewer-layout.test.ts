@@ -29,6 +29,7 @@ describe('常驻查看器结构', () => {
     expect(openTag).toContain('class="fv-viewer"')
     expect(openTag).not.toContain('hidden')
     expect(html).toContain('id="viewer-empty"')
+    expect(html).toContain('id="viewer-name"')
     expect(html).toContain('id="viewer-info"')
     expect(html).toContain('id="split"')
   })

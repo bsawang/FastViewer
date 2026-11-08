@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'FastViewer Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('assets/fonts/NotoSansHans-Regular.otf') format('opentype');
+}
+
 html,
 body {
   height: 100%;
@@ -19,6 +27,16 @@ body {
   padding-left: var(--gap-4);
   background: var(--fv-panel);
   -webkit-app-region: drag;
+}
+
+.fv-app-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  border-radius: 5px;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 #brand {

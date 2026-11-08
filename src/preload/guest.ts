@@ -14,6 +14,13 @@ const fvHost: HostApi = {
   setImmersive: (on: boolean): void => {
     ipcRenderer.send('fv:set-immersive', on)
   },
+  copyEntry: (path: string) => ipcRenderer.invoke('fv:fs-copy', path),
+  pasteEntry: (dirPath: string) => ipcRenderer.invoke('fv:fs-paste', dirPath),
+  renameEntry: (path: string, name: string) => ipcRenderer.invoke('fv:fs-rename', path, name),
+  trashEntry: (path: string) => ipcRenderer.invoke('fv:fs-trash', path),
+  revealEntry: (path: string) => ipcRenderer.invoke('fv:fs-reveal', path),
+  createFolder: (dirPath: string, name: string) =>
+    ipcRenderer.invoke('fv:fs-mkdir', dirPath, name),
   onOpenPath: (cb: (path: string) => void): void => {
     ipcRenderer.on('fv:open-path', (_event, path: string) => cb(path))
   },
