@@ -1,16 +1,27 @@
+# 依赖与构建/打包产物
 node_modules/
 dist/
 release/
 release-build/
+
+# 由 npm run icons 生成（打包前会自动重新生成）
+build/file-icons/
+
+# 日志、覆盖率与缓存
 *.log
+coverage/
+*.tsbuildinfo
 
-# 调研语料（ImageGlass 源码 dump 等，只读本地），保留调研报告正文
-_research/*
-!_research/*.md
+# 调研语料、E2E 夹具、AI 工具产物、截图
+_research/
+.acr/
+.qoder/
+.screenshots/
+.trae-html-share-packages/
 
-# 本地 E2E 夹具、profile 与截图，只保留探针脚本
-.acr/*
-!.acr/probe/
-.acr/probe/*
-!.acr/probe/*.mjs
-!.acr/probe/*.ps1
+# 系统与编辑器杂项
+Thumbs.db
+desktop.ini
+.DS_Store
+.env
+.env.*

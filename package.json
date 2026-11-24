@@ -10,6 +10,7 @@
     "icons": "tsx scripts/file-icons.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "prepackage": "npm run icons",
     "package": "npm run build && electron-builder --win --publish never"
   },
   "devDependencies": {
