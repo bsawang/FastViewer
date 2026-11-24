@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   FileOpError,
   clearClipboard,
-  copyEntry,
+  copyEntries,
   createFolder,
   duplicateName,
   pasteEntry,
@@ -73,12 +73,47 @@ describe('文件操作', () => {
     mkdirSync(dir)
     const source = join(root, 'img.webp')
     writeFileSync(source, 'data')
-    await copyEntry(source)
+    await copyEntries([source], 'copy')
     const first = await pasteEntry(dir)
     const second = await pasteEntry(dir)
-    expect(first).toBe(join(dir, 'img.webp'))
-    expect(second).toBe(join(dir, 'img (2).webp'))
-    expect(readFileSync(second, 'utf8')).toBe('data')
+    expect(first).toEqual([join(dir, 'img.webp')])
+    expect(second).toEqual([join(dir, 'img (2).webp')])
+    expect(readFileSync(second[0], 'utf8')).toBe('data')
+  })
+
+  it('多选复制后一次粘贴全部文件', async () => {
+    const dir = join(root, '输出')
+    mkdirSync(dir)
+    const a = join(root, 'a.png')
+    const b = join(root, 'b.png')
+    writeFileSync(a, 'A')
+    writeFileSync(b, 'B')
+    await copyEntries([a, b], 'copy')
+    const pasted = await pasteEntry(dir)
+    expect(pasted).toEqual([join(dir, 'a.png'), join(dir, 'b.png')])
+    expect(readFileSync(pasted[1], 'utf8')).toBe('B')
+    expect(readFileSync(a, 'utf8')).toBe('A')
+  })
+
+  it('剪切粘贴后移动到目标文件夹并清空剪贴板', async () => {
+    const dir = join(root, '输出')
+    mkdirSync(dir)
+    const source = join(root, 'clip.mp4')
+    writeFileSync(source, 'video')
+    await copyEntries([source], 'cut')
+    const pasted = await pasteEntry(dir)
+    expect(pasted).toEqual([join(dir, 'clip.mp4')])
+    expect(existsSync(source)).toBe(false)
+    expect(readFileSync(pasted[0], 'utf8')).toBe('video')
+    await expect(pasteEntry(join(root, '其它'))).rejects.toBeInstanceOf(FileOpError)
+  })
+
+  it('剪切粘贴到同一文件夹时不重复改名', async () => {
+    const source = join(root, 'same.png')
+    writeFileSync(source, 'x')
+    await copyEntries([source], 'cut')
+    await expect(pasteEntry(root)).rejects.toBeInstanceOf(FileOpError)
+    expect(existsSync(source)).toBe(true)
   })
 
   it('剪贴板为空时粘贴报错', async () => {

@@ -1,1 +1,0 @@
-Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*fastviewer*' -and $_.Name -ne 'bash.exe' -and $_.Name -ne 'powershell.exe' } | Select-Object ProcessId, Name, @{n='Cmd';e={ $_.CommandLine.Substring(0, [Math]::Min(160, $_.CommandLine.Length)) }} | Format-Table -AutoSize -Wrap

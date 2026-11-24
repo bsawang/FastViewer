@@ -31,6 +31,9 @@ export class VideoController {
   private duration = 0
   private seekable = false
   private active = false
+  // 记住播放音量与静音状态，切换视频（或切换回图片再回来）时沿用
+  private volume = 1
+  private muted = false
 
   constructor(video: HTMLVideoElement, elements: VideoControlElements) {
     this.video = video
@@ -98,11 +101,7 @@ export class VideoController {
       this.stopRaf()
       this.render(this.duration)
     })
-    video.addEventListener('volumechange', () => {
-      this.el.volume.value = String(Math.round(this.video.volume * 100))
-      this.el.mute.textContent = this.video.muted || this.video.volume === 0 ? '取消静音' : '静音'
-      this.el.mute.setAttribute('aria-pressed', String(this.video.muted))
-    })
+    video.addEventListener('volumechange', () => this.syncAudioState())
   }
 
   mount(item: MediaItem): void {
@@ -121,6 +120,10 @@ export class VideoController {
     this.render(0)
     this.video.src = item.url
     this.video.load()
+    // 沿用上一个视频的音量与静音状态
+    this.video.muted = this.muted
+    this.video.volume = this.volume
+    this.syncAudioState()
   }
 
   destroy(): void {
@@ -178,7 +181,27 @@ export class VideoController {
   }
 
   toggleMute(): void {
-    this.video.muted = !this.video.muted
+    if (this.isMuted()) {
+      this.video.muted = false
+      if (this.video.volume === 0) this.video.volume = this.volume
+      return
+    }
+    this.video.muted = true
+  }
+
+  private isMuted(): boolean {
+    return this.video.muted || this.video.volume === 0
+  }
+
+  private syncAudioState(): void {
+    const volume = this.video.volume
+    if (volume > 0) this.volume = volume
+    this.muted = this.isMuted()
+    this.el.volume.value = String(Math.round(volume * 100))
+    const label = this.muted ? '取消静音' : '静音'
+    this.el.mute.setAttribute('aria-pressed', String(this.muted))
+    this.el.mute.setAttribute('aria-label', label)
+    this.el.mute.title = `${label}（M）`
   }
 
   getState(): {

@@ -74,43 +74,56 @@ export async function createFolder(dirInput: string, rawName: string): Promise<s
   return destination
 }
 
-let clipboardPath: string | null = null
+export type ClipboardMode = 'copy' | 'cut'
 
-export async function copyEntry(input: string): Promise<string> {
-  const source = check(input)
-  const info = await stat(source)
-  if (!info.isFile()) throw new FileOpError('只能复制文件')
-  clipboardPath = source
-  return source
+interface ClipboardEntry {
+  paths: string[]
+  mode: ClipboardMode
 }
 
-export async function pasteEntry(dirInput: string): Promise<string> {
-  if (!clipboardPath) throw new FileOpError('剪贴板为空，请先复制文件')
-  const source = clipboardPath
-  const info = await stat(source)
-  if (!info.isFile()) throw new FileOpError('只能粘贴文件')
-  const dir = check(dirInput)
-  const name = basename(source)
+let clipboard: ClipboardEntry | null = null
+
+export async function copyEntries(inputs: string[], mode: ClipboardMode): Promise<number> {
+  if (inputs.length === 0) throw new FileOpError('没有可操作的文件')
+  const paths: string[] = []
+  for (const input of inputs) {
+    const source = check(input)
+    const info = await stat(source)
+    if (!info.isFile()) throw new FileOpError('只能复制文件')
+    paths.push(source)
+  }
+  clipboard = { paths, mode }
+  return paths.length
+}
+
+async function uniqueDestination(dir: string, name: string): Promise<string> {
   for (let index = 1; index <= 1000; index += 1) {
     const candidate = join(dir, duplicateName(name, index))
-    try {
-      await copyFile(source, candidate, constants.COPYFILE_EXCL)
-      return candidate
-    } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as { code?: unknown }).code === 'EEXIST'
-      ) {
-        continue
-      }
-      throw error
-    }
+    if (!(await exists(candidate))) return candidate
   }
   throw new FileOpError('目标文件夹中同名文件过多')
 }
 
+export async function pasteEntry(dirInput: string): Promise<string[]> {
+  if (!clipboard) throw new FileOpError('剪贴板为空，请先复制文件')
+  const dir = check(dirInput)
+  const { paths, mode } = clipboard
+  const pasted: string[] = []
+  for (const source of paths) {
+    if (mode === 'cut' && dirname(source) === dir) continue
+    const destination = await uniqueDestination(dir, basename(source))
+    if (mode === 'copy') {
+      await copyFile(source, destination, constants.COPYFILE_EXCL)
+    } else {
+      await rename(source, destination)
+    }
+    pasted.push(destination)
+  }
+  if (mode === 'cut') clipboard = null
+  if (pasted.length === 0) throw new FileOpError('文件已在该文件夹中')
+  return pasted
+}
+
 export function clearClipboard(): void {
-  clipboardPath = null
+  clipboard = null
 }

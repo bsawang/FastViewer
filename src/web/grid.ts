@@ -48,6 +48,7 @@ export class Grid {
   private columns = 4
   private metrics: GridMetrics = computeMetrics(0, this.columns, 0)
   private currentIndex = -1
+  private readonly selected = new Set<number>()
   private frame = 0
   private observer: ResizeObserver | null = null
 
@@ -63,7 +64,13 @@ export class Grid {
       const target = event.target as HTMLElement | null
       if (target?.closest('.fv-tile')) return
       event.preventDefault()
+      this.clearSelection()
       this.options.onBlankContextMenu?.(event.clientX, event.clientY)
+    })
+    el.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('.fv-tile')) return
+      this.clearSelection()
     })
     this.observer = new ResizeObserver(() => {
       if (!this.el || this.el.clientWidth === 0) return
@@ -77,6 +84,7 @@ export class Grid {
     if (reset) {
       this.items = entries.slice()
       this.currentIndex = -1
+      this.selected.clear()
       if (this.el) this.el.scrollTop = 0
     } else {
       this.items = this.items.concat(entries)
@@ -113,6 +121,35 @@ export class Grid {
     if (next === null) return
     this.el.scrollTop = next
     this.paint()
+  }
+
+  getSelectedIndices(): number[] {
+    return [...this.selected].sort((a, b) => a - b)
+  }
+
+  selectOnly(index: number): void {
+    if (this.selected.size === 1 && this.selected.has(index)) return
+    this.selected.clear()
+    if (index >= 0) this.selected.add(index)
+    this.paintSelection()
+  }
+
+  clearSelection(): void {
+    if (this.selected.size === 0) return
+    this.selected.clear()
+    this.paintSelection()
+  }
+
+  private toggleSelection(index: number): void {
+    if (this.selected.has(index)) this.selected.delete(index)
+    else this.selected.add(index)
+    this.paintSelection()
+  }
+
+  private paintSelection(): void {
+    for (const [index, node] of this.tiles) {
+      node.classList.toggle('is-selected', this.selected.has(index))
+    }
   }
 
   refreshLayout(preserveAnchor: boolean): void {
@@ -237,9 +274,15 @@ export class Grid {
 
     media.append(folder, img, mark)
     node.append(media, name)
-    node.addEventListener('click', () => {
+    node.addEventListener('click', (event) => {
       const index = Number(node.dataset.index)
-      if (Number.isInteger(index)) this.options.onOpen(index)
+      if (!Number.isInteger(index)) return
+      if (event.ctrlKey || event.metaKey) {
+        this.toggleSelection(index)
+        return
+      }
+      this.clearSelection()
+      this.options.onOpen(index)
     })
     node.addEventListener('dblclick', () => {
       const index = Number(node.dataset.index)
@@ -263,6 +306,7 @@ export class Grid {
     node.dataset.index = String(index)
     node.dataset.kind = item.kind
     node.classList.toggle('is-current', index === this.currentIndex)
+    node.classList.toggle('is-selected', this.selected.has(index))
     node.style.left = `${left}px`
     node.style.top = `${top}px`
     node.style.width = `${size}px`

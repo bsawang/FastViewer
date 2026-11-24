@@ -248,6 +248,12 @@ body {
   transform: scale(0.99);
 }
 
+.fv-tile.is-selected {
+  outline-color: var(--fv-accent);
+  outline-width: 3px;
+  background: color-mix(in srgb, var(--fv-accent) 14%, var(--fv-panel));
+}
+
 .fv-tile.is-current {
   outline-color: var(--fv-accent);
   outline-width: 5px;
@@ -715,6 +721,44 @@ body {
   color: var(--fv-accent);
 }
 
+.fv-video-icon-button {
+  display: grid;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 0;
+  background: var(--fv-fill);
+  color: var(--fv-text);
+  cursor: pointer;
+  place-items: center;
+  transition:
+    background var(--t-hover) ease,
+    color var(--t-hover) ease;
+}
+
+.fv-video-icon-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.fv-video-icon-button:hover {
+  background: var(--fv-fill-strong);
+}
+
+.fv-video-icon-button[aria-pressed='true'] {
+  color: var(--fv-accent);
+}
+
+.fv-video-icon-button[aria-pressed='true'] .fv-mute-on {
+  display: none;
+}
+
+.fv-video-icon-button[aria-pressed='false'] .fv-mute-off {
+  display: none;
+}
+
 .fv-video-time {
   flex: 0 0 auto;
   color: var(--fv-muted);
@@ -969,6 +1013,17 @@ body {
 .fv-fs-mini {
   right: 16px;
   bottom: 16px;
+}
+
+/* 视频播放时抬到播放条上方，避免遮挡 */
+.fv-viewer--video .fv-mini,
+.fv-viewer--video .fv-viewer-info {
+  bottom: 52px;
+}
+
+.fv-viewer--video .fv-viewer-detail {
+  bottom: 52px;
+  max-height: calc(100% - 64px);
 }
 
 .fv-mini[hidden] {

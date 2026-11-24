@@ -689,15 +689,23 @@ async function openRequest(path: string): Promise<boolean> {
   return true
 }
 
-async function copyItem(item: GridItem): Promise<void> {
-  const result = await window.fvHost?.copyEntry(item.path)
+async function copyTargets(targets: GridItem[], mode: 'copy' | 'cut'): Promise<void> {
+  const result = await window.fvHost?.copyEntries(
+    targets.map((item) => item.path),
+    mode,
+  )
   if (!result) return
   if (!result.ok) {
     flashFooter(result.message)
     return
   }
   hasClipboard = true
-  flashFooter(`已复制「${item.name}」`)
+  const verb = mode === 'cut' ? '剪切' : '复制'
+  if (targets.length > 1) {
+    flashFooter(`已${verb} ${targets.length} 项`)
+    return
+  }
+  flashFooter(`已${verb}「${targets[0]?.name ?? ''}」`)
 }
 
 async function renameItem(item: GridItem): Promise<void> {
@@ -724,22 +732,36 @@ async function revealItem(item: GridItem): Promise<void> {
   if (!result.ok) flashFooter(result.message)
 }
 
-async function deleteItem(item: GridItem): Promise<void> {
+async function deleteItems(targets: GridItem[]): Promise<void> {
+  if (targets.length === 0) return
   const confirmed = await confirmDialog.ask({
     title: '删除',
-    message: `确定将「${item.name}」移到回收站？`,
+    message:
+      targets.length > 1
+        ? `确定将选中的 ${targets.length} 项移到回收站？`
+        : `确定将「${targets[0]?.name ?? ''}」移到回收站？`,
     confirmText: '删除',
     danger: true,
   })
   if (!confirmed) return
-  const result = await window.fvHost?.trashEntry(item.path)
-  if (!result) return
-  if (!result.ok) {
-    flashFooter(result.message)
-    return
+  let failed = 0
+  let failure = ''
+  for (const target of targets) {
+    const result = await window.fvHost?.trashEntry(target.path)
+    if (!result) return
+    if (!result.ok) {
+      failed += 1
+      failure = result.message
+    }
   }
   await openDir(currentPath, true)
-  flashFooter(`已删除「${item.name}」`)
+  if (failed === 0) {
+    flashFooter(targets.length > 1 ? `已删除 ${targets.length} 项` : '已删除')
+    return
+  }
+  flashFooter(
+    failed === targets.length ? failure : `${failed} 项删除失败：${failure}`,
+  )
 }
 
 async function createNewFolder(): Promise<void> {
@@ -769,6 +791,10 @@ async function pasteEntry(): Promise<void> {
     return
   }
   await openDir(currentPath, true)
+  if ((result.count ?? 1) > 1) {
+    flashFooter(`已粘贴 ${result.count} 项`)
+    return
+  }
   flashFooter(`已粘贴「${leafName(result.path ?? '')}」`)
 }
 
@@ -776,13 +802,34 @@ function showItemMenu(index: number, x: number, y: number): void {
   const item = items[index]
   if (!item) return
   if (currentPath === '' || item.name === '返回上级') return
+  if (!grid.getSelectedIndices().includes(index)) grid.selectOnly(index)
+  const targets = grid
+    .getSelectedIndices()
+    .map((selected) => items[selected])
+    .filter((entry): entry is GridItem => entry !== undefined && entry.name !== '返回上级')
+  if (targets.length === 0) return
+  const multiple = targets.length > 1
+  const allMedia = targets.every((entry) => entry.kind === 'image' || entry.kind === 'video')
   const entries: ContextMenuItem[] = []
-  if (item.kind === 'image') {
-    entries.push({ label: '复制', action: () => void copyItem(item) })
-    entries.push({ label: '在文件浏览器中打开', action: () => void revealItem(item) })
+  if (allMedia) {
+    entries.push({
+      label: multiple ? `复制 ${targets.length} 项` : '复制',
+      action: () => void copyTargets(targets, 'copy'),
+    })
+    entries.push({
+      label: multiple ? `剪切 ${targets.length} 项` : '剪切',
+      action: () => void copyTargets(targets, 'cut'),
+    })
   }
-  entries.push({ label: '重命名', action: () => void renameItem(item) })
-  entries.push({ label: '删除', danger: true, action: () => void deleteItem(item) })
+  if (!multiple) {
+    entries.push({ label: '在文件浏览器中打开', action: () => void revealItem(item) })
+    entries.push({ label: '重命名', action: () => void renameItem(item) })
+  }
+  entries.push({
+    label: multiple ? `删除 ${targets.length} 项` : '删除',
+    danger: true,
+    action: () => void deleteItems(targets),
+  })
   contextMenu.show(x, y, entries)
 }
 

@@ -13,7 +13,7 @@ import { createAssociations } from './associations'
 import { ConfigStore } from './config'
 import {
   FileOpError,
-  copyEntry,
+  copyEntries,
   createFolder,
   pasteEntry,
   renameEntry,
@@ -222,24 +222,32 @@ if (!gotLock) {
       }
       return '操作失败'
     }
-    const runFs = async (task: () => Promise<string | undefined>): Promise<FsResult> => {
+    const runFs = async (
+      task: () => Promise<string | undefined | { path?: string; count?: number }>,
+    ): Promise<FsResult> => {
       try {
-        return { ok: true, path: await task() }
+        const result = await task()
+        if (typeof result === 'object' && result !== null) return { ok: true, ...result }
+        return { ok: true, path: result }
       } catch (error) {
         logger.warn('file operation failed', String(error))
         return { ok: false, message: fsFailure(error) }
       }
     }
-    ipcMain.handle('fv:fs-copy', (_event, input: unknown) =>
+    ipcMain.handle('fv:fs-copy', (_event, input: unknown, mode: unknown) =>
       runFs(async () => {
-        if (typeof input !== 'string') throw new FileOpError('路径无效')
-        await copyEntry(input)
+        if (!Array.isArray(input) || input.some((path) => typeof path !== 'string')) {
+          throw new FileOpError('路径无效')
+        }
+        const count = await copyEntries(input as string[], mode === 'cut' ? 'cut' : 'copy')
+        return { count }
       }),
     )
     ipcMain.handle('fv:fs-paste', (_event, dir: unknown) =>
       runFs(async () => {
         if (typeof dir !== 'string') throw new FileOpError('路径无效')
-        return pasteEntry(dir)
+        const paths = await pasteEntry(dir)
+        return { path: paths[0], count: paths.length }
       }),
     )
     ipcMain.handle('fv:fs-rename', (_event, input: unknown, name: unknown) =>

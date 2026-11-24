@@ -51,6 +51,36 @@ describe('图墙卡片视觉', () => {
     expect(current).toContain('outline-width: 5px')
     expect(current).toContain('box-shadow')
   })
+
+  it('多选图块有强调色描边与浅色底', () => {
+    const selected = rule('.fv-tile.is-selected')
+    expect(selected).toContain('outline-color: var(--fv-accent)')
+    expect(selected).toContain('outline-width: 3px')
+    expect(selected).toContain('background')
+  })
+})
+
+describe('多选交互', () => {
+  const grid = readFileSync(join(process.cwd(), 'src/web/grid.ts'), 'utf8')
+  const app = readFileSync(join(process.cwd(), 'src/web/app.ts'), 'utf8')
+
+  it('Ctrl/Cmd 点击切换选中且不打开媒体', () => {
+    expect(grid).toContain('event.ctrlKey || event.metaKey')
+    expect(grid).toContain('this.toggleSelection(index)')
+  })
+
+  it('点击空白或切换目录时清空多选', () => {
+    expect(grid).toContain("target?.closest('.fv-tile')")
+    expect(grid).toContain('this.clearSelection()')
+    expect(grid).toContain('this.selected.clear()')
+  })
+
+  it('右键菜单按选中项提供复制、剪切、删除', () => {
+    expect(app).toContain("copyTargets(targets, 'copy')")
+    expect(app).toContain("copyTargets(targets, 'cut')")
+    expect(app).toContain('deleteItems(targets)')
+    expect(app).toContain('`剪切 ${targets.length} 项`')
+  })
 })
 
 describe('控件位置', () => {

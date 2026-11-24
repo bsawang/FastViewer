@@ -7,6 +7,7 @@ const html = readFileSync(join(root, 'src/web/index.html'), 'utf8')
 const css = readFileSync(join(root, 'src/web/app.css'), 'utf8')
 const app = readFileSync(join(root, 'src/web/app.ts'), 'utf8')
 const viewer = readFileSync(join(root, 'src/web/viewer.ts'), 'utf8')
+const controls = readFileSync(join(root, 'src/web/video-controls.ts'), 'utf8')
 
 function block(source: string, selector: string): string {
   const start = source.indexOf(`${selector} {`)
@@ -66,6 +67,11 @@ describe('查看器浮动样式', () => {
     expect(info).toContain('bottom: 12px')
     expect(info).not.toMatch(/^\s*top:/m)
   })
+
+  it('视频播放时 mini 面板与信息浮层抬到播放条上方', () => {
+    expect(css).toMatch(/\.fv-viewer--video \.fv-mini,[\s\S]*?bottom: 52px/)
+    expect(block(css, '.fv-viewer--video .fv-viewer-detail')).toContain('bottom: 52px')
+  })
 })
 
 describe('常驻查看器接线', () => {
@@ -86,5 +92,35 @@ describe('常驻查看器接线', () => {
     expect(viewer).toContain('showEmpty')
     expect(viewer).not.toContain('onClose')
     expect(viewer).not.toContain('setFullscreen')
+  })
+})
+
+describe('视频静音按钮', () => {
+  it('静音为图标按钮，含静音/取消静音两种图标', () => {
+    const tag = html.slice(html.indexOf('id="video-mute"') - 200)
+    const button = tag.slice(0, tag.indexOf('</button>'))
+    expect(button).toContain('fv-video-icon-button')
+    expect(button).toContain('aria-pressed="false"')
+    expect(button).toContain('class="fv-mute-on"')
+    expect(button).toContain('class="fv-mute-off"')
+  })
+
+  it('图标按钮样式随 aria-pressed 切换', () => {
+    expect(block(css, '.fv-video-icon-button')).toContain('place-items: center')
+    expect(css).toContain(".fv-video-icon-button[aria-pressed='true'] .fv-mute-on")
+    expect(css).toContain(".fv-video-icon-button[aria-pressed='false'] .fv-mute-off")
+  })
+
+  it('切换视频时沿用音量与静音状态', () => {
+    expect(controls).toContain('private volume = 1')
+    expect(controls).toContain('private muted = false')
+    expect(controls).toContain('this.video.muted = this.muted')
+    expect(controls).toContain('this.video.volume = this.volume')
+    expect(controls).toContain('this.syncAudioState()')
+  })
+
+  it('静音切换在音量为 0 时恢复上次音量', () => {
+    expect(controls).toContain('if (this.video.volume === 0) this.video.volume = this.volume')
+    expect(controls).toContain('this.video.muted || this.video.volume === 0')
   })
 })
