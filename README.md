@@ -8,6 +8,12 @@
 
 ---
 
+## 界面预览
+
+![FastViewer 界面预览：左侧图墙、右侧查看器](docs/preview.jpg)
+
+左侧图墙与右侧查看器同屏显示，顶部为面包屑与排序 / 列数控制，当前图片带强调色描边。
+
 ## 下载与安装
 
 前往 [Releases](https://github.com/bsawang/FastViewer/releases/latest) 下载：
