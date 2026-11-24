@@ -52,6 +52,9 @@ export interface HostApi {
   trashEntry(path: string): Promise<FsResult>
   revealEntry(path: string): Promise<FsResult>
   createFolder(dirPath: string, name: string): Promise<FsResult>
+  /** 监听当前浏览目录，传空字符串停止监听。 */
+  watchDir(dirPath: string): Promise<{ ok: boolean }>
+  onDirChanged(cb: (dirPath: string) => void): void
   onOpenPath(cb: (path: string) => void): void
   onConfigReset(cb: (kind: ResetKind) => void): void
   onTheme(cb: (theme: ThemeName) => void): void

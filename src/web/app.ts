@@ -52,6 +52,7 @@ let items: GridItem[] = []
 let realLoaded = 0
 let totalReal = 0
 let loadingMore = false
+let refreshing = false
 let generation = 0
 let menu: HTMLElement | null = null
 let persistTimer = 0
@@ -341,6 +342,11 @@ function bindSplit(): void {
   document.addEventListener('keydown', (event) => {
     const target = event.target
     if (event.key === ' ' && target instanceof HTMLButtonElement) return
+    if (event.key === 'F5') {
+      event.preventDefault()
+      void refreshDir()
+      return
+    }
     const editing =
       target instanceof HTMLElement &&
       (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
@@ -465,13 +471,13 @@ function bindBackTop(): void {
   sync()
 }
 
-async function fetchPage(path: string, offset: number): Promise<DirResponse> {
+async function fetchPage(path: string, offset: number, limit = PAGE_LIMIT): Promise<DirResponse> {
   const params = new URLSearchParams({
     path,
     sort: sort.key,
     order: sort.order,
     offset: String(offset),
-    limit: String(PAGE_LIMIT),
+    limit: String(limit),
   })
   const response = await fetch(`/api/dir?${params.toString()}`)
   const body = (await response.json().catch(() => null)) as
@@ -548,6 +554,7 @@ async function openDir(target: string, keepViewer = false): Promise<boolean> {
       syncViewer(preferred)
       publishState()
       window.fvHost?.setFolderTitle('此电脑')
+      void window.fvHost?.watchDir('')
       return true
     }
 
@@ -571,6 +578,7 @@ async function openDir(target: string, keepViewer = false): Promise<boolean> {
     syncViewer(preferred)
     publishState()
     window.fvHost?.setFolderTitle(folderTitle(page.path))
+    void window.fvHost?.watchDir(page.path)
     void window.fvHost?.patchConfig({ lastFolder: page.path })
     return true
   } catch (error) {
@@ -579,6 +587,33 @@ async function openDir(target: string, keepViewer = false): Promise<boolean> {
     lastErrorCode = error instanceof DirFetchError ? error.code : null
     showFooter(message)
     return false
+  }
+}
+
+/**
+ * 目录监听事件触发的静默刷新：重新拉取列表并原地更新图墙与查看器，
+ * 保留滚动位置、当前项和多选；失败时保留现有内容，不打扰用户。
+ */
+async function refreshDir(): Promise<void> {
+  if (!currentPath || refreshing) return
+  refreshing = true
+  const requestId = generation
+  try {
+    const page = await fetchPage(currentPath, 0, Math.max(PAGE_LIMIT, realLoaded))
+    if (requestId !== generation) return
+    lastErrorCode = null
+    parentPath = page.parent
+    totalReal = page.total
+    realLoaded = page.entries.length
+    const up = upEntry()
+    items = up ? [up, ...page.entries] : page.entries
+    grid.refreshEntries(items, displayTotal())
+    viewer.syncItems(buildMediaSeq(items))
+    publishState()
+  } catch {
+    // 目录可能正被移动或暂时不可读，保留当前列表，等下一次事件或 F5。
+  } finally {
+    refreshing = false
   }
 }
 
@@ -918,6 +953,9 @@ async function boot(): Promise<void> {
   bindDrop()
   window.fvHost?.onOpenPath((path) => {
     void openRequest(path)
+  })
+  window.fvHost?.onDirChanged((dir) => {
+    if (dir === currentPath) void refreshDir()
   })
   window.fvHost?.onConfigReset((kind) => {
     void applyReset(kind)

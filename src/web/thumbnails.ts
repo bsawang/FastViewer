@@ -168,7 +168,7 @@ export class ThumbnailService {
 
   async get(item: GridItem, signal: AbortSignal): Promise<string | null> {
     if (item.kind !== 'image' && item.kind !== 'video') return null
-    const key = `${item.kind}:${item.path}`
+    const key = `${item.kind}:${item.path}:${item.mtimeMs}`
     const cached = this.cache.get(key)
     if (cached) {
       this.touch(key, cached)

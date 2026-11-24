@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { statSync } from 'node:fs'
+import { statSync, watch } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, ipcMain, Menu, screen, shell, webContents } from 'electron'
@@ -11,6 +11,7 @@ import { isThemeName, type ThemeName } from '../shared/theme'
 import { initialBounds } from '../shared/window-state'
 import { createAssociations } from './associations'
 import { ConfigStore } from './config'
+import { DirWatcher } from './dir-watch'
 import {
   FileOpError,
   copyEntries,
@@ -63,6 +64,21 @@ function deliverOpenPath(path: string): void {
   guest.send('fv:open-path', path)
 }
 
+// 只监听当前浏览目录；事件合并后再通知页面刷新列表。
+const dirWatcher = new DirWatcher({
+  watch: (path, onChange, onError) => {
+    const watcher = watch(path, { persistent: false })
+    watcher.on('change', onChange)
+    watcher.on('error', onError)
+    return { close: () => watcher.close() }
+  },
+  notify: (path) => {
+    const guest = guestContents()
+    if (guest && !guest.isDestroyed()) guest.send('fv:dir-changed', path)
+  },
+  onError: (error) => logger.warn('directory watch failed', String(error)),
+})
+
 function isAllowedNavigation(url: string): boolean {
   if (url.startsWith('file://')) return true
   return server !== null && url.startsWith(`http://127.0.0.1:${server.port}/`)
@@ -88,6 +104,7 @@ app.on('web-contents-created', (_event, contents) => {
       pendingOpenPath = null
     })
     contents.on('destroyed', () => {
+      dirWatcher.stop()
       const win = BrowserWindow.getAllWindows()[0]
       if (win && !win.isDestroyed()) win.webContents.send('shell:immersive', false)
     })
@@ -101,6 +118,7 @@ if (!gotLock) {
 } else {
   setupWindowIpc()
   Menu.setApplicationMenu(null)
+  app.on('will-quit', () => dirWatcher.stop())
 
   app.on('second-instance', (_event, argv) => {
     const win = BrowserWindow.getAllWindows()[0]
@@ -198,6 +216,16 @@ if (!gotLock) {
       const path = startupPath
       startupPath = null
       return path
+    })
+    ipcMain.handle('fv:watch-dir', (_event, input: unknown) => {
+      if (input === '') {
+        dirWatcher.stop()
+        return { ok: true }
+      }
+      if (typeof input !== 'string') return { ok: false }
+      const checked = checkAbsolutePath(input)
+      if (!checked.ok) return { ok: false }
+      return { ok: dirWatcher.watch(checked.path) }
     })
     ipcMain.on('fv:set-folder-title', (_event, title: unknown) => {
       const name = typeof title === 'string' ? title : ''

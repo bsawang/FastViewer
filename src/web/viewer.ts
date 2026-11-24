@@ -219,6 +219,37 @@ export class Viewer {
     this.options.onIndexChange(this.items[this.index])
   }
 
+  /**
+   * 目录刷新后同步媒体序列：当前项仍存在时原地更新（不重载图片、不打断视频），
+   * 当前项消失时顺延到最接近的一项。
+   */
+  syncItems(items: MediaItem[]): void {
+    if (!this.isOpen()) {
+      if (items.length > 0) this.open(items, 0, this.detailOpen)
+      return
+    }
+    if (items.length === 0) {
+      this.showEmpty()
+      return
+    }
+    const same =
+      items.length === this.items.length &&
+      items.every((item, index) => item.path === this.items[index]?.path)
+    if (same) return
+    const current = this.items[this.index]
+    const at = current ? items.findIndex((item) => item.path === current.path) : -1
+    this.items = items.slice()
+    if (at >= 0) {
+      this.index = at
+      this.updateCounter()
+      this.options.onIndexChange(this.items[this.index])
+      return
+    }
+    this.index = wrapIndex(Math.min(this.index, this.items.length - 1), this.items.length)
+    this.render()
+    this.options.onIndexChange(this.items[this.index])
+  }
+
   private step(delta: number): void {
     this.setIndex(this.index + delta)
   }

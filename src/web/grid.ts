@@ -93,6 +93,71 @@ export class Grid {
     this.refreshLayout(false)
   }
 
+  /**
+   * 目录内容变化后原地刷新：按路径复用已有图块，尽量不重建缩略图，
+   * 并保持滚动位置、当前项与多选状态。
+   */
+  refreshEntries(entries: GridItem[], total: number): void {
+    if (!this.el || !this.layer) {
+      this.items = entries.slice()
+      this.total = total
+      return
+    }
+    const scroller = this.el
+    let anchorPath: string | null = null
+    let anchorOffset = 0
+    if (this.items.length > 0 && this.metrics.rows > 0) {
+      const row = rowIndexAt(this.metrics.rowTops, scroller.scrollTop)
+      const index = Math.min(this.items.length - 1, row * this.metrics.cols)
+      anchorPath = this.items[index]?.path ?? null
+      anchorOffset = scroller.scrollTop - (this.metrics.rowTops[row] ?? GRID_PADDING)
+    }
+    const currentPath = this.items[this.currentIndex]?.path ?? null
+    const selectedPaths = new Set<string>()
+    for (const index of this.selected) {
+      const path = this.items[index]?.path
+      if (path) selectedPaths.add(path)
+    }
+
+    const nodeByPath = new Map<string, HTMLElement>()
+    for (const [index, node] of this.tiles) {
+      const path = this.items[index]?.path
+      if (path) nodeByPath.set(path, node)
+    }
+    this.tiles.clear()
+    this.items = entries.slice()
+    this.total = total
+
+    const indexByPath = new Map<string, number>()
+    for (const [index, item] of entries.entries()) {
+      indexByPath.set(item.path, index)
+      const node = nodeByPath.get(item.path)
+      if (node) this.tiles.set(index, node)
+    }
+    for (const [path, node] of nodeByPath) {
+      if (indexByPath.has(path)) continue
+      this.cancelThumb(node)
+      node.remove()
+      this.pool.push(node)
+    }
+
+    this.currentIndex = currentPath ? indexByPath.get(currentPath) ?? -1 : -1
+    this.selected.clear()
+    for (const path of selectedPaths) {
+      const index = indexByPath.get(path)
+      if (index !== undefined) this.selected.add(index)
+    }
+
+    this.refreshLayout(false)
+    if (anchorPath) {
+      const index = indexByPath.get(anchorPath)
+      if (index !== undefined) {
+        scroller.scrollTop = anchorScrollTop(index, anchorOffset, this.metrics.cols, this.metrics)
+        this.paint()
+      }
+    }
+  }
+
   setColumns(columns: number): void {
     const next = clampColumns(columns)
     if (next === this.columns) return
@@ -328,7 +393,7 @@ export class Grid {
       return
     }
 
-    const key = `${item.kind}:${item.path}`
+    const key = `${item.kind}:${item.path}:${item.mtimeMs}`
     if (node.dataset.thumbKey === key) return
     this.cancelThumb(node)
     node.dataset.thumbKey = key

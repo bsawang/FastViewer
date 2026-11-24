@@ -22,6 +22,10 @@ const fvHost: HostApi = {
   revealEntry: (path: string) => ipcRenderer.invoke('fv:fs-reveal', path),
   createFolder: (dirPath: string, name: string) =>
     ipcRenderer.invoke('fv:fs-mkdir', dirPath, name),
+  watchDir: (dirPath: string) => ipcRenderer.invoke('fv:watch-dir', dirPath),
+  onDirChanged: (cb: (dirPath: string) => void): void => {
+    ipcRenderer.on('fv:dir-changed', (_event, dirPath: string) => cb(dirPath))
+  },
   onOpenPath: (cb: (path: string) => void): void => {
     ipcRenderer.on('fv:open-path', (_event, path: string) => cb(path))
   },
