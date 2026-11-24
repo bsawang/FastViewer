@@ -1,6 +1,6 @@
 {
   "name": "fastviewer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "FastViewer — 自用图片浏览器（Electron 双层壳）",
   "main": "dist/main/index.js",
