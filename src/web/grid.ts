@@ -32,8 +32,9 @@ export interface GridOptions {
 const OVERSCAN_ROWS = 2
 const LOAD_MORE_ROWS = 3
 
-function fileUrl(path: string): string {
-  return `/api/file?path=${encodeURIComponent(path)}`
+function fileUrl(path: string, mtimeMs: number): string {
+  // 带上修改时间：文件被覆盖后 URL 变化，避免命中旧的 HTTP 缓存。
+  return `/api/file?path=${encodeURIComponent(path)}&v=${mtimeMs}`
 }
 
 export class Grid {
@@ -403,7 +404,7 @@ export class Grid {
 
     const provider = this.options.getThumbnail
     if (!provider) {
-      this.setThumb(img, fileUrl(item.path))
+      this.setThumb(img, fileUrl(item.path, item.mtimeMs))
       return
     }
 
@@ -416,12 +417,21 @@ export class Grid {
         return
       }
       // 缩略图生成失败：图片回退原图，视频保留下方占位与播放标记。
-      if (item.kind === 'image') this.setThumb(img, fileUrl(item.path))
+      if (item.kind === 'image') this.setThumb(img, fileUrl(item.path, item.mtimeMs))
     })
   }
 
-  private setThumb(img: HTMLImageElement, url: string): void {
-    img.dataset.url = new URL(url, location.href).href
+  private setThumb(img: HTMLImageElement, url: string, attempt = 0): void {
+    // 文件可能仍在写入：失败后短暂延时用带随机参数的地址重试，绕过可能缓存的坏响应。
+    const absolute = new URL(url, location.href).href
+    img.dataset.url = absolute
+    img.onerror = () => {
+      if (img.dataset.url !== absolute || attempt >= 2) return
+      window.setTimeout(() => {
+        if (img.dataset.url !== absolute) return
+        this.setThumb(img, `${url}&r=${attempt + 1}`, attempt + 1)
+      }, 600 * (attempt + 1))
+    }
     img.src = url
   }
 

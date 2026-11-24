@@ -11,8 +11,8 @@ interface CacheEntry {
   url: string
 }
 
-function fileUrl(path: string): string {
-  return `/api/file?path=${encodeURIComponent(path)}`
+function fileUrl(path: string, mtimeMs: number): string {
+  return `/api/file?path=${encodeURIComponent(path)}&v=${mtimeMs}`
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
@@ -60,8 +60,12 @@ function waitForVideo(
   })
 }
 
-async function renderImage(path: string, signal: AbortSignal): Promise<Blob | null> {
-  const response = await fetch(fileUrl(path), { signal })
+async function renderImage(
+  path: string,
+  mtimeMs: number,
+  signal: AbortSignal,
+): Promise<Blob | null> {
+  const response = await fetch(fileUrl(path, mtimeMs), { signal })
   if (!response.ok) return null
   const blob = await response.blob()
   if (signal.aborted) return null
@@ -90,12 +94,16 @@ async function renderImage(path: string, signal: AbortSignal): Promise<Blob | nu
   return canvasToBlob(canvas)
 }
 
-async function renderVideo(path: string, signal: AbortSignal): Promise<Blob | null> {
+async function renderVideo(
+  path: string,
+  mtimeMs: number,
+  signal: AbortSignal,
+): Promise<Blob | null> {
   const video = document.createElement('video')
   video.preload = 'metadata'
   video.muted = true
   video.playsInline = true
-  video.src = fileUrl(path)
+  video.src = fileUrl(path, mtimeMs)
   try {
     await waitForVideo(video, 'loadedmetadata', signal, VIDEO_TIMEOUT_MS)
     const duration = Number.isFinite(video.duration) ? video.duration : 0
@@ -186,8 +194,8 @@ export class ThumbnailService {
       }
       const blob =
         item.kind === 'image'
-          ? await renderImage(item.path, signal)
-          : await renderVideo(item.path, signal)
+          ? await renderImage(item.path, item.mtimeMs, signal)
+          : await renderVideo(item.path, item.mtimeMs, signal)
       if (!blob || signal.aborted) return null
       const url = URL.createObjectURL(blob)
       this.store(key, { url })

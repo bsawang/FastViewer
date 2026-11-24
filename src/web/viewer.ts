@@ -111,6 +111,7 @@ export class Viewer {
   private keepZoom: ZoomState | null = null
   private stallTimer = 0
   private loadingTimer = 0
+  private imageRetryTimer = 0
 
   constructor(elements: ViewerElements, options: ViewerOptions) {
     this.el = elements
@@ -234,14 +235,20 @@ export class Viewer {
     }
     const same =
       items.length === this.items.length &&
-      items.every((item, index) => item.path === this.items[index]?.path)
+      items.every(
+        (item, index) =>
+          item.path === this.items[index]?.path && item.mtimeMs === this.items[index]?.mtimeMs,
+      )
     if (same) return
     const current = this.items[this.index]
     const at = current ? items.findIndex((item) => item.path === current.path) : -1
+    const changed = at >= 0 && current !== undefined && items[at]?.mtimeMs !== current.mtimeMs
     this.items = items.slice()
     if (at >= 0) {
       this.index = at
       this.updateCounter()
+      // 文件补全后，若当前仍停在错误页则重新加载。
+      if (changed && !this.el.error.hidden && this.items[at]?.kind === 'image') this.render()
       this.options.onIndexChange(this.items[this.index])
       return
     }
@@ -657,8 +664,14 @@ export class Viewer {
   private async renderImage(item: MediaItem, token: number): Promise<void> {
     this.clearVideoHandlers()
     this.videoController.destroy()
+    window.clearTimeout(this.imageRetryTimer)
+    await this.loadImage(item, token, 0)
+  }
+
+  private async loadImage(item: MediaItem, token: number, attempt: number): Promise<void> {
+    const url = attempt === 0 ? item.url : `${item.url}&r=${attempt}`
     try {
-      const loaded = await cache.load(item.url)
+      const loaded = await cache.load(url)
       if (!this.generation.isCurrent(token)) return
       this.el.detailDim.textContent = `${loaded.naturalWidth} × ${loaded.naturalHeight}`
       this.el.detailPixels.textContent = formatPixels(loaded.naturalWidth, loaded.naturalHeight)
@@ -677,15 +690,31 @@ export class Viewer {
       this.el.image.onload = reveal
       this.el.image.onerror = () => {
         if (!this.generation.isCurrent(token)) return
-        this.showError()
+        this.scheduleImageRetry(item, token, attempt)
       }
-      this.el.image.src = item.url
+      this.el.image.src = url
       if (this.el.image.complete && this.el.image.naturalWidth > 0) reveal()
       this.prefetchNeighbors()
     } catch {
       if (!this.generation.isCurrent(token)) return
-      this.showError()
+      this.scheduleImageRetry(item, token, attempt)
     }
+  }
+
+  /** 新文件可能仍在写入：失败后短暂延时换一个地址重试，避免直接落到错误页。 */
+  private scheduleImageRetry(item: MediaItem, token: number, attempt: number): void {
+    if (attempt >= 2) {
+      this.showError()
+      return
+    }
+    window.clearTimeout(this.imageRetryTimer)
+    this.imageRetryTimer = window.setTimeout(
+      () => {
+        if (!this.generation.isCurrent(token)) return
+        void this.loadImage(item, token, attempt + 1)
+      },
+      attempt === 0 ? 600 : 1500,
+    )
   }
 
   private renderVideo(item: MediaItem, token: number): void {

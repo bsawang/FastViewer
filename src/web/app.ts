@@ -471,7 +471,12 @@ function bindBackTop(): void {
   sync()
 }
 
-async function fetchPage(path: string, offset: number, limit = PAGE_LIMIT): Promise<DirResponse> {
+async function fetchPage(
+  path: string,
+  offset: number,
+  limit = PAGE_LIMIT,
+  fresh = false,
+): Promise<DirResponse> {
   const params = new URLSearchParams({
     path,
     sort: sort.key,
@@ -479,6 +484,7 @@ async function fetchPage(path: string, offset: number, limit = PAGE_LIMIT): Prom
     offset: String(offset),
     limit: String(limit),
   })
+  if (fresh) params.set('fresh', '1')
   const response = await fetch(`/api/dir?${params.toString()}`)
   const body = (await response.json().catch(() => null)) as
     | (DirResponse & { error?: { code?: string; message?: string } })
@@ -599,7 +605,7 @@ async function refreshDir(): Promise<void> {
   refreshing = true
   const requestId = generation
   try {
-    const page = await fetchPage(currentPath, 0, Math.max(PAGE_LIMIT, realLoaded))
+    const page = await fetchPage(currentPath, 0, Math.max(PAGE_LIMIT, realLoaded), true)
     if (requestId !== generation) return
     lastErrorCode = null
     parentPath = page.parent

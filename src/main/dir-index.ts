@@ -30,6 +30,8 @@ export interface DirQuery {
   order?: SortOrder
   offset?: number
   limit?: number
+  /** 跳过缓存重新读取（目录内文件被覆盖时目录 mtime 不变，需要强制刷新）。 */
+  fresh?: boolean
 }
 
 export type DirErrorCode = 'BAD_PATH' | 'FORBIDDEN_PATH' | 'NOT_FOUND' | 'IO_ERROR'
@@ -115,7 +117,7 @@ function normalizeQuery(query: DirQuery): Required<DirQuery> {
       ? Math.floor(query.limit)
       : 500
   const limit = Math.min(1000, Math.max(1, rawLimit))
-  return { sort, order, offset, limit }
+  return { sort, order, offset, limit, fresh: query.fresh === true }
 }
 
 async function mapLimit<T>(
@@ -165,8 +167,8 @@ export class DirIndex {
       throw new DirError('BAD_PATH', 400, '路径不是目录')
     }
 
-    const { sort, order, offset, limit } = normalizeQuery(query)
-    let cached = this.lookup(dirPath, dirStat.mtimeMs)
+    const { sort, order, offset, limit, fresh } = normalizeQuery(query)
+    let cached = fresh ? null : this.lookup(dirPath, dirStat.mtimeMs)
     if (!cached) {
       cached = await this.load(dirPath, dirStat.mtimeMs)
       this.store(dirPath, cached)

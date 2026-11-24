@@ -19,7 +19,7 @@ export function buildMediaSeq(items: GridItem[]): MediaItem[] {
       name: item.name,
       size: item.size,
       mtimeMs: item.mtimeMs,
-      url: `/api/file?path=${encodeURIComponent(item.path)}`,
+      url: `/api/file?path=${encodeURIComponent(item.path)}&v=${item.mtimeMs}`,
     })
   }
   return seq

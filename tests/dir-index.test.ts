@@ -127,6 +127,22 @@ describe('DirIndex 列表与分类', () => {
     expect(page.entries[3]?.ext).toBe('jpg')
   })
 
+  it('fresh 跳过缓存，覆盖文件后能读到新的 mtime 与大小', async () => {
+    const target = join(root, 'a2.jpg')
+    const before = await index.get(root, { sort: 'name' })
+    const beforeSize = before.entries.find((entry) => entry.name === 'a2.jpg')?.size
+    writeFileSync(target, 'x'.repeat(321))
+    utimesSync(target, new Date(base + 9000), new Date(base + 9000))
+
+    const cached = await index.get(root, { sort: 'name' })
+    expect(cached.entries.find((entry) => entry.name === 'a2.jpg')?.size).toBe(beforeSize)
+
+    const fresh = await index.get(root, { sort: 'name', fresh: true })
+    const entry = fresh.entries.find((item) => item.name === 'a2.jpg')
+    expect(entry?.size).toBe(321)
+    expect(entry?.mtimeMs).toBe(base + 9000)
+  })
+
   it('空目录返回 total 0', async () => {
     const empty = mkdtempSync(join(tmpdir(), 'fv-empty-'))
     const page = await index.get(empty)

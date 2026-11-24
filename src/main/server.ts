@@ -235,6 +235,7 @@ export function startLocalServer(options: StartOptions): Promise<LocalServer> {
           order,
           offset: numberParam(url.searchParams, 'offset'),
           limit: numberParam(url.searchParams, 'limit'),
+          fresh: url.searchParams.get('fresh') === '1',
         })
         sendJsonBody(res, 200, page, req.method === 'HEAD')
       } catch (error) {

@@ -18,8 +18,8 @@ describe('buildMediaSeq', () => {
     ])
   })
 
-  it('生成编码后的 /api/file URL', () => {
-    expect(buildMediaSeq(entries)[2]?.url).toBe('/api/file?path=E%3A%5Cc%20png.png')
+  it('生成编码后的 /api/file URL，并带上修改时间', () => {
+    expect(buildMediaSeq(entries)[2]?.url).toBe('/api/file?path=E%3A%5Cc%20png.png&v=3')
   })
 
   it('目录序列为空', () => {
